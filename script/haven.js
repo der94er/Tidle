@@ -475,9 +475,10 @@ var Haven = {
     };
     if (logs[key]) Haven._addLog(logs[key]);
 
-    /* Watchtower extra line (GDD §3 Phase 2) */
+    /* Watchtower extra line (GDD §3 Phase 2) + unlock wilds tab */
     if (key === 'watchtower') {
       Haven._addLog('ruins. sick land. but in the distance \u2014 structures. old ones.');
+      if (typeof Wilds !== 'undefined') Wilds.unlock();
     }
 
     /* Villager triggers for this building */

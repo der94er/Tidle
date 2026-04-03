@@ -467,6 +467,57 @@ body.night {
   z-index: 100;
 }
 
+/* --- Wilds layout (GDD §9 Phase 4) --- */
+.wilds-layout {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.wilds-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.wilds-right {
+  width: 160px;
+  flex-shrink: 0;
+}
+
+/* Coordinate display */
+.tile-coord {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+  margin-bottom: 16px;
+}
+
+/* Mini-map: 9×9 CSS grid of small monospace cells */
+.mini-map {
+  display: grid;
+  gap: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 16px;
+  user-select: none;
+}
+
+.map-cell {
+  width:  14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+/* Carry display (same style as stores, shown while exploring) */
+.carry-display {
+  margin-top: 20px;
+}
+
 /* --- Scrollbar --- */
 ::-webkit-scrollbar       { width: 3px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
