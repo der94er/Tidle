@@ -225,11 +225,83 @@ html, body {
 .fire-level-4 { color: var(--mark-glow);      }
 .fire-level-5 { color: var(--mark-glow);      }
 
-/* --- Stores column (GDD §4 — 7 resources) --- */
-.stores {
-  width: 140px;
+/* --- Buildings section (GDD §6) --- */
+.buildings-section {
+  margin-top: 20px;
+}
+
+.crafting-section {
+  margin-top: 16px;
+}
+
+/* Section header: small caps label above buttons */
+.section-header {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Build/craft buttons share action-btn style */
+.build-btn,
+.craft-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-right: 0;
+  margin-bottom: 6px;
+}
+
+/* Build progress bar (GDD §6: visible progress bar) */
+.build-progress {
+  margin-bottom: 12px;
+}
+
+.build-label {
+  display: block;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.progress-track {
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--mark-amber);
+  width: 0;
+  transition: width 1s linear;
+  border-radius: 1px;
+}
+
+.build-timer {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* --- Right column: stores + population (GDD §4, §8) --- */
+.haven-right {
+  width: 150px;
   flex-shrink: 0;
   padding-top: 2px;
+}
+
+/* --- Stores column (GDD §4 — 7 resources) --- */
+.stores {
+  /* width from .haven-right */
 }
 
 .store-row {
@@ -252,6 +324,67 @@ html, body {
   color: var(--text-primary);
   min-width: 28px;
   text-align: right;
+}
+
+/* --- Population panel (GDD §8) --- */
+.population {
+  margin-top: 24px;
+}
+
+.pop-cap {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.villager-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+
+.villager-name {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.villager-role {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.assign-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+/* Assignment buttons: smaller, subtle, border only on active */
+.assign-btn {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 2px 5px;
+  cursor: pointer;
+  text-transform: lowercase;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.assign-btn:hover {
+  color: var(--mark-amber);
+  border-color: var(--mark-amber);
+}
+
+.assign-btn.active {
+  color: var(--mark-amber);
+  border-color: var(--mark-amber);
 }
 
 /* --- Night visual (GDD §5: "text gets slightly dimmer during night") --- */
