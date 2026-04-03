@@ -1,0 +1,348 @@
+/* ============================================================
+   THE LAST EMBER — style.css
+   All colors, typography, and layout from DESIGN.md §2
+   ============================================================ */
+
+/* --- Custom properties (GDD §2 palette) --- */
+:root {
+  --bg:           #0D0D0D;
+  --text-primary: #E8E0D4;
+  --text-secondary:#8A8070;
+  --mark-amber:   #D4740A;
+  --mark-glow:    #F5A623;
+  --sickness:     #8B2500;
+  --memory-gold:  #C9A94E;
+  --nature-sage:  #5A6E50;
+  --border:       #2A2A28;
+}
+
+/* --- Reset --- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* --- Base (GDD §2 Typography) --- */
+html, body {
+  background: var(--bg);
+  color: var(--text-primary);
+  /* Narrative text: Georgia serif, 16px, line-height 1.8 */
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1.8;
+  height: 100%;
+}
+
+/* --- Layout --- */
+#wrapper {
+  position: relative;
+  width: 700px;
+  margin: 0 auto;
+  padding-top: 60px; /* room for header */
+}
+
+#content {
+  overflow: hidden;
+  position: relative;
+}
+
+#outerSlider {
+  position: relative;
+  width: 700px;
+}
+
+#main {
+  width: 700px;
+  position: relative;
+}
+
+/* --- Header tabs --- */
+#header {
+  height: 36px;
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+}
+
+/* UI elements: sans-serif 13-14px */
+.headerButton {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding-bottom: 6px;
+  border-bottom: 2px solid transparent;
+  user-select: none;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.headerButton:hover {
+  color: var(--text-primary);
+}
+
+.headerButton.selected {
+  color: var(--mark-amber);
+  border-bottom-color: var(--mark-amber);
+}
+
+/* --- Location slider --- */
+#locationSlider {
+  position: relative;
+  left: 0;
+  display: flex;
+  transition: left 300ms ease;
+}
+
+.location {
+  width: 700px;
+  flex-shrink: 0;
+  min-height: 400px;
+}
+
+/* --- Narrative log --- */
+.log {
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin-bottom: 32px;
+}
+
+/* Narrative text: Georgia serif 16px, line-height 1.8 — primary text color */
+.narrative {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.narrative.visible {
+  opacity: 1;
+}
+
+/* Timestamps / flavor: italic serif 13px, secondary color */
+.narrative.timestamp {
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Memory text: serif 16px, memory gold, slightly letter-spaced */
+.narrative.memory {
+  color: var(--memory-gold);
+  letter-spacing: 0.04em;
+}
+
+/* --- Actions area --- */
+.actions {
+  margin-top: 12px;
+  min-height: 40px;
+}
+
+/* Buttons: sans-serif 13px, mark amber, bordered */
+.action-btn {
+  display: inline-block;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--mark-amber);
+  background: transparent;
+  border: 1px solid var(--mark-amber);
+  padding: 5px 14px;
+  cursor: pointer;
+  margin-right: 10px;
+  margin-bottom: 8px;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  transition: opacity 0.4s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.action-btn.visible {
+  opacity: 1;
+}
+
+.action-btn:hover {
+  background: var(--mark-amber);
+  color: var(--bg);
+}
+
+.action-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* --- Mark vision overlay (GDD §11) --- */
+/* "screen darkens slightly" — semi-transparent black */
+#markVisionOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  z-index: 50;
+}
+
+#markVisionOverlay.active {
+  opacity: 1;
+}
+
+/* --- Haven layout (GDD §3 Phase 2-3) --- */
+.haven-layout {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.haven-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Fire level status (GDD §12 — level names) */
+.fire-status {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  transition: color 0.4s ease;
+}
+
+/* Fire level colors — amber brightens as fire grows */
+.fire-level-0 { color: var(--text-secondary); }
+.fire-level-1 { color: var(--text-secondary); }
+.fire-level-2 { color: var(--mark-amber);     }
+.fire-level-3 { color: var(--mark-amber);     }
+.fire-level-4 { color: var(--mark-glow);      }
+.fire-level-5 { color: var(--mark-glow);      }
+
+/* --- Stores column (GDD §4 — 7 resources) --- */
+.stores {
+  width: 140px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.store-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.store-label {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+}
+
+.store-count {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 28px;
+  text-align: right;
+}
+
+/* --- Night visual (GDD §5: "text gets slightly dimmer during night") --- */
+body.night {
+  --text-primary:   #BAB3AA; /* ~80% brightness of #E8E0D4 */
+  --text-secondary: #6E665A; /* ~80% brightness of #8A8070 */
+}
+
+/* --- Notifications (left column) --- */
+#notifications {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 155px;
+  padding: 20px 16px;
+  overflow: hidden;
+  height: 100%;
+  pointer-events: none;
+}
+
+#notifyGradient {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 80px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+}
+
+/* Notification text: sans-serif 13px, secondary */
+.notification {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 6px;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.notification.visible {
+  opacity: 1;
+}
+
+/* --- Menu (top-right) --- */
+.menu {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  display: flex;
+  gap: 16px;
+  z-index: 100;
+}
+
+.menuBtn {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.menuBtn:hover {
+  color: var(--text-primary);
+}
+
+/* --- Save notification --- */
+#saveNotify {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* --- Scrollbar --- */
+::-webkit-scrollbar       { width: 3px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* --- Accessibility: respect reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

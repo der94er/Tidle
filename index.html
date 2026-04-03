@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Last Ember</title>
+  <meta name="description" content="A text adventure of memory, sacrifice, and a dying land.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div id="wrapper">
+    <div id="saveNotify">saved.</div>
+    <div id="content">
+      <div id="outerSlider">
+        <div id="main">
+          <div id="header"></div>
+          <!-- #locationSlider injected by engine.js -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Darkening overlay for mark visions (GDD §11) -->
+  <div id="markVisionOverlay"></div>
+
+  <!-- Core systems (load order matters: engine first, then $SM, then UI) -->
+  <script src="script/engine.js"></script>
+  <script src="script/state_manager.js"></script>
+  <script src="script/header.js"></script>
+  <script src="script/notifications.js"></script>
+
+  <!-- Game modules -->
+  <script src="script/grave.js"></script>
+  <script src="script/haven.js"></script>
+  <script src="script/wilds.js"></script>
+  <script src="script/combat.js"></script>
+  <script src="script/memory.js"></script>
+  <script src="script/events.js"></script>
+  <script src="script/leaderboard.js"></script>
+  <script src="script/save.js"></script>
+
+  <!-- Boot -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      Engine.init();
+    });
+  </script>
+
+</body>
+</html>
