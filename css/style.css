@@ -544,6 +544,68 @@ body.night {
   border-bottom-color: var(--mark-amber);
 }
 
+/* --- Boot overlay (GDD §15: continue vs new game) --- */
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 200;
+}
+
+.boot-title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 20px;
+  color: var(--text-primary);
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.boot-sub {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+/* --- Two-tab warning (GDD §15) --- */
+.two-tab-warning {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  color: var(--text-secondary);
+  z-index: 200;
+}
+
+/* --- Score screen (GDD §13) --- */
+.score-total {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 18px;
+  color: var(--mark-amber);
+  letter-spacing: 0.04em;
+}
+
+.score-time {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.score-stat {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 /* --- Scrollbar --- */
 ::-webkit-scrollbar       { width: 3px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
@@ -554,5 +616,89 @@ body.night {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+}
+
+/* --- Mobile responsive (GDD §16: browser desktop + mobile responsive) --- */
+@media (max-width: 760px) {
+  /* Fluid container */
+  #wrapper {
+    width: 100%;
+    padding: 56px 16px 16px;
+  }
+
+  #outerSlider,
+  #main {
+    width: 100%;
+  }
+
+  #locationSlider {
+    width: 100%;
+  }
+
+  .location {
+    width: 100vw;
+  }
+
+  /* Notifications: float above content on small screens */
+  #notifications {
+    width: 100%;
+    height: auto;
+    position: relative;
+    top: auto;
+    left: auto;
+    padding: 8px 16px 0;
+    pointer-events: none;
+  }
+
+  /* Haven layout: stack columns vertically */
+  .haven-layout {
+    flex-direction: column;
+  }
+
+  .haven-right {
+    width: 100%;
+  }
+
+  /* Wilds layout: stack columns vertically */
+  .wilds-layout {
+    flex-direction: column;
+  }
+
+  .wilds-right {
+    width: 100%;
+  }
+
+  /* Wider mini-map cells for touch */
+  .map-cell {
+    width:  18px;
+    height: 18px;
+  }
+
+  /* Action buttons: full-width on mobile */
+  .action-btn {
+    margin-right: 6px;
+  }
+
+  /* Name input: full width */
+  .name-input {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 500px) {
+  /* Header tabs: smaller font */
+  .headerButton {
+    font-size: 12px;
+  }
+
+  /* Tighten fire status */
+  .fire-status {
+    font-size: 12px;
+  }
+
+  /* Log max-height: shorter on small screens */
+  .log {
+    max-height: 320px;
   }
 }

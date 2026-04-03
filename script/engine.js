@@ -70,6 +70,11 @@ var Engine = {
     /* Load or init game state */
     Engine.loadGame();
 
+    /* GDD §13: record start time for fastest-completion leaderboard */
+    if (!$SM.get('game.startTime')) {
+      $SM.set('game.startTime', Date.now());
+    }
+
     /* Start the income ticker (villager production — active from Phase C) */
     Engine._incomeTimeout = Engine.setTimeout($SM.collectIncome, 1000);
 

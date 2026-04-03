@@ -40,10 +40,10 @@
   <script src="script/leaderboard.js"></script>
   <script src="script/save.js"></script>
 
-  <!-- Boot -->
+  <!-- Boot — Save.boot() handles two-tab detection, continue/new game, then Engine.init() -->
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      Engine.init();
+      Save.boot();
     });
   </script>
 

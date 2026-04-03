@@ -825,14 +825,9 @@ var Wilds = {
     Engine.setTimeout(Wilds._showScore, delay + 3000);
   },
 
-  /* Score stub — Phase F */
+  /* GDD §13 — show score screen via Leaderboard module */
   _showScore: function() {
-    var btn = document.createElement('button');
-    btn.className   = 'action-btn visible';
-    btn.textContent = 'play again';
-    btn.addEventListener('click', function() { Engine.confirmRestart(); });
-    Wilds._actionsEl.innerHTML = '';
-    Wilds._actionsEl.appendChild(btn);
+    Leaderboard.show();
   },
 
   /* ----------------------------------------------------------------

@@ -623,6 +623,9 @@ var Haven = {
     var name = Haven.VILLAGER_NAMES[Math.floor(Math.random() * Haven.VILLAGER_NAMES.length)];
     pop.push({ name: name, assignment: 'idle' });
     $SM.set('game.population', pop, true);
+    /* GDD §13 score component: track peak population */
+    var maxPop = $SM.get('playStats.maxPop') || 0;
+    if (pop.length > maxPop) $SM.set('playStats.maxPop', pop.length, true);
 
     /* GDD §3 Phase 2 + §8 — stranger arrival narrative */
     if (strangerIdx === 0) {
