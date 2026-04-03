@@ -866,6 +866,8 @@ var Haven = {
     Haven._makeGatherButton('gather wood',  'wood');
     Haven._makeGatherButton('gather stone', 'stone');
     Haven._makeStokeButton();
+    /* Phase E: inject active event buttons (trader etc) */
+    if (typeof Events !== 'undefined') Events._injectHavenButtons();
   },
 
   /* GDD §3: 10s cooldown, 3-5 units. Night: +25% cooldown (GDD §5) */

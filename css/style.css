@@ -518,6 +518,32 @@ body.night {
   margin-top: 20px;
 }
 
+/* --- Player name input (GDD §11 — memory #25, blinking cursor only) --- */
+.name-input-wrapper {
+  margin-top: 16px;
+}
+
+.name-input {
+  display: block;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1.8;
+  width: 100%;
+  max-width: 280px;
+  outline: none;
+  padding: 2px 0;
+  margin-bottom: 12px;
+  caret-color: var(--mark-amber);
+}
+
+.name-input:focus {
+  border-bottom-color: var(--mark-amber);
+}
+
 /* --- Scrollbar --- */
 ::-webkit-scrollbar       { width: 3px; }
 ::-webkit-scrollbar-track { background: var(--bg); }

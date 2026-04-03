@@ -76,10 +76,12 @@ var Engine = {
     /* Init modules based on game progress, travel to the right one */
     Grave.init();
     Wilds.init();
+    Events.init();
 
     if ($SM.get('game.grave.phase', true) >= 5) {
       /* Player is past Phase 1 — restore Haven */
       Haven.init();
+      Memory.init(); /* after Haven so tab order is: haven | wilds | journal */
       /* Restore wilds tab if watchtower was already built */
       if ($SM.get('game.buildings.watchtower')) Wilds.unlock();
       Engine.travelTo(Haven);

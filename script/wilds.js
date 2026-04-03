@@ -696,6 +696,17 @@ var Wilds = {
       return;
     }
 
+    /* GDD §11: room 5 (final) — show name input BEFORE starting blight combat */
+    if (roomIdx === 4) {
+      Wilds._triggerMemory(25, 800);
+      Engine.setTimeout(function() {
+        Memory.showNameInput(function() {
+          Wilds._startBlightCombat();
+        });
+      }, 2500);
+      return;
+    }
+
     Wilds._triggerMemory(room.memory, 800);
 
     Engine.setTimeout(function() {
@@ -710,27 +721,48 @@ var Wilds = {
         loot: base.loot
       };
 
-      /* GDD §18: Blight Heart keeps damage between attempts */
-      if (room.enemy === 'blight') {
-        var saved = $SM.get('game.sanctum.blightHp');
-        if (saved && saved < enemy.hp) enemy.hp = saved;
-      }
-
       var x = $SM.get('game.player.x', true);
       var y = $SM.get('game.player.y', true);
 
       Combat.start(enemy, x, y, 'sanctum', function(won) {
         if (won) {
-          if (room.enemy === 'blight') $SM.remove('game.sanctum.blightHp', true);
           Wilds._sanctumRoom(roomIdx + 1);
         } else {
-          if (room.enemy === 'blight') {
-            $SM.set('game.sanctum.blightHp', $SM.get('game.combat.lastEnemyHp') || 1, true);
-          }
           Wilds._returnToHaven();
         }
       });
     }, 1800);
+  },
+
+  /* Starts Blight Heart combat — called after name input confirmed (GDD §11) */
+  _startBlightCombat: function() {
+    var base    = Wilds.ENEMIES['blight'];
+    var isNight = $SM.get('game.isNight') || false;
+    var enemy   = {
+      key:  'blight',
+      name: base.name,
+      hp:   isNight ? Math.ceil(base.hp  * 1.25) : base.hp,
+      atk:  isNight ? Math.ceil(base.atk * 1.25) : base.atk,
+      def:  isNight ? Math.ceil(base.def * 1.25) : base.def,
+      loot: base.loot
+    };
+
+    /* GDD §18: Blight Heart keeps damage across failed attempts */
+    var saved = $SM.get('game.sanctum.blightHp');
+    if (saved && saved < enemy.hp) enemy.hp = saved;
+
+    var x = $SM.get('game.player.x', true);
+    var y = $SM.get('game.player.y', true);
+
+    Combat.start(enemy, x, y, 'sanctum', function(won) {
+      if (won) {
+        $SM.remove('game.sanctum.blightHp', true);
+        Wilds._sanctumRoom(5); /* advances to _sanctumComplete */
+      } else {
+        $SM.set('game.sanctum.blightHp', $SM.get('game.combat.lastEnemyHp') || 1, true);
+        Wilds._returnToHaven();
+      }
+    });
   },
 
   _sanctumComplete: function() {

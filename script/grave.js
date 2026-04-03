@@ -171,8 +171,9 @@ var Grave = {
     $SM.set('game.memories.count', 1);
     $SM.set('game.memories.found', [1]);
 
-    /* Init the haven module and travel to it */
+    /* Init haven + memory journal, then travel */
     Haven.init();
+    Memory.init();
     Engine.travelTo(Haven);
   },
 
