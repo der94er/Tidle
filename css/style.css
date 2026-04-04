@@ -606,6 +606,120 @@ body.night {
   color: var(--text-secondary);
 }
 
+/* --- Grave: Phase 2+ atmospheric view (GDD §3 Phase 1 complete) --- */
+.grave-mark-status {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: var(--mark-amber);
+  letter-spacing: 0.06em;
+  margin-bottom: 20px;
+}
+
+.grave-ember {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mark-amber);
+  margin: 0 auto 24px;
+  animation: emberPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes emberPulse {
+  0%,100% { opacity: 0.35; box-shadow: 0 0 4px var(--mark-amber); }
+  50%      { opacity: 1;    box-shadow: 0 0 14px var(--mark-glow); }
+}
+
+/* --- Haven: constrained log + separator above actions --- */
+#havenLog {
+  max-height: 200px; /* ~6-7 messages; older scroll up */
+}
+
+#havenActions {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 0;
+}
+
+/* --- Wilds: status bar (torch | food | pack) --- */
+.tile-coord {
+  min-height: 1.4em; /* reserve space even when empty during init */
+}
+
+/* --- Wilds: wider right column for 11×11 map --- */
+.wilds-right {
+  width: 190px;
+}
+
+/* Map cells: add gap for breathing room */
+.mini-map {
+  gap: 2px;
+}
+
+/* Map legend below mini-map */
+.map-legend {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin-top: 10px;
+  user-select: none;
+}
+
+/* --- Journal: memory entries with numerals, threads, dividers --- */
+.memory-entry {
+  margin-bottom: 2px;
+}
+
+.memory-numeral {
+  display: block;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+.memory-thread {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.memory-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+
+/* --- Restart confirmation modal --- */
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 13, 13, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  z-index: 300;
+}
+
+.confirm-msg {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 340px;
+  line-height: 1.8;
+}
+
+.confirm-btns {
+  display: flex;
+  gap: 16px;
+}
+
 /* --- Scrollbar --- */
 ::-webkit-scrollbar       { width: 3px; }
 ::-webkit-scrollbar-track { background: var(--bg); }

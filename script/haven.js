@@ -620,7 +620,11 @@ var Haven = {
     /* Initialize food store on first arrival if not present */
     if ($SM.get('stores.food') === undefined) $SM.set('stores.food', 0, true);
 
-    var name = Haven.VILLAGER_NAMES[Math.floor(Math.random() * Haven.VILLAGER_NAMES.length)];
+    /* No duplicate names — remove already-used names from the pool */
+    var usedNames = pop.map(function(v) { return v.name; });
+    var namePool  = Haven.VILLAGER_NAMES.filter(function(n) { return usedNames.indexOf(n) === -1; });
+    if (!namePool.length) namePool = Haven.VILLAGER_NAMES; /* fallback: 20 names > 10 villager max */
+    var name = namePool[Math.floor(Math.random() * namePool.length)];
     pop.push({ name: name, assignment: 'idle' });
     $SM.set('game.population', pop, true);
     /* GDD §13 score component: track peak population */

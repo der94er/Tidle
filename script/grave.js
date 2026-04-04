@@ -165,6 +165,26 @@ var Grave = {
     Grave._runSteps(steps, Grave._onPhase1Complete);
   },
 
+  /* Phase 1 complete — atmospheric grave view for return visits */
+  _showPhase2: function() {
+    var level    = $SM.get('game.fire.level', true);
+    var markText = (level >= 2) ? 'the mark burns steady.' : 'the mark flickers.';
+
+    var statusEl = document.createElement('div');
+    statusEl.className   = 'grave-mark-status';
+    statusEl.textContent = markText;
+    Grave._logEl.appendChild(statusEl);
+
+    var ember = document.createElement('div');
+    ember.className = 'grave-ember';
+    Grave._logEl.appendChild(ember);
+
+    var txt = document.createElement('div');
+    txt.className   = 'narrative visible';
+    txt.textContent = 'you climbed out of the grave. you are not going back.';
+    Grave._logEl.appendChild(txt);
+  },
+
   /* Phase 1 complete — hand off to haven.js */
   _onPhase1Complete: function() {
     $SM.set('game.grave.phase', 5);

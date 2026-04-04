@@ -15,6 +15,20 @@ var Memory = {
   /* GDD §11 memory #1 — shown by grave.js inline; repeated here for journal */
   MEMORY_1: 'a woman\u2019s hand, placing a ring in yours. \u2018come back to me.\u2019 her face is blurred.',
 
+  /* Thread classification: memories about your own life vs. previous mark-bearers */
+  THREAD_PAST: { 1:true, 2:true, 3:true, 5:true, 7:true, 9:true, 11:true,
+                 14:true, 15:true, 17:true, 20:true, 21:true, 22:true, 24:true, 25:true },
+
+  _toRoman: function(n) {
+    var vals = [10, 9, 5, 4, 1];
+    var syms = ['x', 'ix', 'v', 'iv', 'i'];
+    var r = '';
+    for (var i = 0; i < vals.length; i++) {
+      while (n >= vals[i]) { r += syms[i]; n -= vals[i]; }
+    }
+    return r;
+  },
+
   init: function() {
     if (Memory.tab) return;
 
@@ -63,14 +77,43 @@ var Memory = {
       return;
     }
 
-    /* Render each found memory in sequential order, gold text (GDD §2) */
-    found.forEach(function(idx) {
-      var text = Memory._getText(idx);
-      if (!text) return;
-      var el = document.createElement('div');
-      el.className   = 'narrative memory visible';
-      el.textContent = text;
-      Memory._logEl.appendChild(el);
+    /* Collect only valid (non-null) entries before rendering so dividers work correctly */
+    var entries = found.map(function(idx) {
+      return { idx: idx, text: Memory._getText(idx) };
+    }).filter(function(e) { return !!e.text; });
+
+    entries.forEach(function(e, i) {
+      var entry = document.createElement('div');
+      entry.className = 'memory-entry';
+
+      /* Roman numeral */
+      var numEl = document.createElement('span');
+      numEl.className   = 'memory-numeral';
+      numEl.textContent = Memory._toRoman(i + 1) + '.';
+      entry.appendChild(numEl);
+
+      /* Memory text — gold (GDD §2) */
+      var textEl = document.createElement('div');
+      textEl.className   = 'narrative memory visible';
+      textEl.textContent = e.text;
+      entry.appendChild(textEl);
+
+      /* Thread label */
+      var threadEl = document.createElement('div');
+      threadEl.className   = 'memory-thread';
+      threadEl.textContent = Memory.THREAD_PAST[e.idx]
+        ? '\u2014 a fragment of your past'
+        : '\u2014 the mark-bearers before you';
+      entry.appendChild(threadEl);
+
+      Memory._logEl.appendChild(entry);
+
+      /* Thin divider between entries (not after the last) */
+      if (i < entries.length - 1) {
+        var hr = document.createElement('hr');
+        hr.className = 'memory-divider';
+        Memory._logEl.appendChild(hr);
+      }
     });
   },
 

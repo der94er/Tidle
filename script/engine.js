@@ -109,9 +109,37 @@ var Engine = {
   },
 
   confirmRestart: function() {
-    if (window.confirm('restart the game? all progress will be lost.')) {
+    if (document.getElementById('restartModal')) return; /* already open */
+
+    var modal = document.createElement('div');
+    modal.id        = 'restartModal';
+    modal.className = 'confirm-modal';
+
+    var msg = document.createElement('div');
+    msg.className   = 'confirm-msg';
+    msg.textContent = 'abandon this journey? all progress will be lost.';
+
+    var btns = document.createElement('div');
+    btns.className = 'confirm-btns';
+
+    var yes = document.createElement('button');
+    yes.className   = 'action-btn visible';
+    yes.textContent = 'yes';
+    yes.addEventListener('click', function() {
+      document.body.removeChild(modal);
       Engine.deleteSave();
-    }
+    });
+
+    var no = document.createElement('button');
+    no.className   = 'action-btn visible';
+    no.textContent = 'no';
+    no.addEventListener('click', function() { document.body.removeChild(modal); });
+
+    btns.appendChild(yes);
+    btns.appendChild(no);
+    modal.appendChild(msg);
+    modal.appendChild(btns);
+    document.body.appendChild(modal);
   },
 
   deleteSave: function() {

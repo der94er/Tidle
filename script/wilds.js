@@ -194,6 +194,11 @@ var Wilds = {
     Wilds._mapEl.className = 'mini-map';
     right.appendChild(Wilds._mapEl);
 
+    var legend = document.createElement('div');
+    legend.className = 'map-legend';
+    legend.innerHTML = '@ you &nbsp;&nbsp; H haven<br>r ruin &nbsp;&nbsp; c den<br>g grove &nbsp; s sanctum<br>$ cache &nbsp; f forest';
+    right.appendChild(legend);
+
     Engine.updateSlider();
     Dispatch('stateUpdate').subscribe(Wilds._onStateUpdate);
   },
@@ -339,7 +344,7 @@ var Wilds = {
     var y    = $SM.get('game.player.y', true);
     var tile = Wilds._getTile(x, y);
 
-    if (Wilds._descEl) Wilds._descEl.textContent = x + ', ' + y;
+    /* coordinates removed — status bar handled by _buildActions via _renderStatusBar */
 
     switch (tile) {
 
@@ -552,9 +557,63 @@ var Wilds = {
      Actions
   ---------------------------------------------------------------- */
 
+  _renderStatusBar: function() {
+    if (!Wilds._descEl) return;
+
+    var torches    = ($SM.get('game.inventory.torches',           true) || 0) +
+                     ($SM.get('game.inventory.reinforcedTorches', true) || 0);
+    var hasLantern = !!$SM.get('game.inventory.markLantern');
+    var food       = $SM.get('stores.food', true);
+    var carry      = Wilds._getCarryTotal();
+
+    Wilds._descEl.innerHTML = '';
+
+    /* Torch segment */
+    var torchSpan = document.createElement('span');
+    if (hasLantern) {
+      torchSpan.textContent = 'mark lantern (unlimited)';
+    } else if (torches <= 0) {
+      torchSpan.textContent = 'no torch.';
+      torchSpan.style.color = 'var(--sickness)';
+    } else {
+      var torchLabel = document.createTextNode('torch: ');
+      var torchNum   = document.createElement('span');
+      torchNum.textContent = torches + '/20';
+      if (torches <= 3) torchNum.style.color = 'var(--sickness)';
+      torchSpan.appendChild(torchLabel);
+      torchSpan.appendChild(torchNum);
+    }
+
+    /* Food segment */
+    var foodSpan = document.createElement('span');
+    if (food <= 0) {
+      foodSpan.textContent = 'no food. turn back.';
+      foodSpan.style.color = 'var(--sickness)';
+    } else {
+      var foodLabel = document.createTextNode('food: ');
+      var foodNum   = document.createElement('span');
+      foodNum.textContent = food;
+      if (food <= 3) foodNum.style.color = 'var(--sickness)';
+      foodSpan.appendChild(foodLabel);
+      foodSpan.appendChild(foodNum);
+    }
+
+    /* Pack segment */
+    var packSpan = document.createElement('span');
+    packSpan.textContent = 'pack: ' + carry + '/' + Wilds.MAX_CARRY;
+
+    Wilds._descEl.appendChild(torchSpan);
+    Wilds._descEl.appendChild(document.createTextNode(' \u2502 '));
+    Wilds._descEl.appendChild(foodSpan);
+    Wilds._descEl.appendChild(document.createTextNode(' \u2502 '));
+    Wilds._descEl.appendChild(packSpan);
+  },
+
   _buildActions: function() {
     if (!Wilds._actionsEl) return;
     Wilds._actionsEl.innerHTML = '';
+
+    Wilds._renderStatusBar();
 
     if ($SM.get('game.combat.active')) return;
 
@@ -568,7 +627,7 @@ var Wilds = {
     var hasLantern = !!$SM.get('game.inventory.markLantern');
     var wounded    = !!$SM.get('game.player.wounded');
 
-    /* Movement buttons */
+    /* Movement buttons — rendered for all four directions including edges */
     var dirs = [
       { label: 'north', dx: 0,  dy: -1 },
       { label: 'south', dx: 0,  dy:  1 },
@@ -579,18 +638,30 @@ var Wilds = {
     dirs.forEach(function(d) {
       var nx = x + d.dx;
       var ny = y + d.dy;
-      if (nx < 0 || nx >= Wilds.MAP_W || ny < 0 || ny >= Wilds.MAP_H) return;
 
       var btn = document.createElement('button');
       btn.className   = 'action-btn visible';
       btn.textContent = d.label;
+
+      /* Edge of map — render disabled with tooltip */
+      if (nx < 0 || nx >= Wilds.MAP_W || ny < 0 || ny >= Wilds.MAP_H) {
+        btn.disabled = true;
+        btn.title    = 'edge of the map';
+        Wilds._actionsEl.appendChild(btn);
+        return;
+      }
 
       var isHaven  = (nx === Wilds.START_X && ny === Wilds.START_Y);
       var explored = Wilds._isExplored(nx, ny) || isHaven;
       var canMove  = !wounded && food >= 1 && (explored || hasLantern || torches > 0);
       btn.disabled = !canMove;
 
-      if (explored && !isHaven) {
+      if (!canMove) {
+        /* Explain why the button is disabled */
+        if (wounded)                                        btn.title = 'you are wounded';
+        else if (food < 1)                                  btn.title = 'no food';
+        else if (!explored && !hasLantern && torches < 1)  btn.title = 'no torch';
+      } else if (explored && !isHaven) {
         var adj = Wilds._getTile(nx, ny);
         if (adj !== 'sick') btn.title = adj;
       }
@@ -869,14 +940,21 @@ var Wilds = {
 
     var px   = $SM.get('game.player.x', true);
     var py   = $SM.get('game.player.y', true);
-    var VIEW = 4;
-    var SIZE = VIEW * 2 + 1; /* 9×9 */
+    var VIEW = 5;
+    var SIZE = VIEW * 2 + 1; /* 11×11 */
 
-    var CHARS  = { sick:'\u00b7', forest:'f', cache:'c', ruin:'r', warden:'w', den:'d', grove:'g', sanctum:'x', haven:'h' };
+    /* GDD §2 colors; chars per design spec */
+    var CHARS  = { sick:'\u00b7', forest:'f', cache:'$', ruin:'r', warden:'w', den:'c', grove:'g', sanctum:'s', haven:'H' };
     var COLORS = {
-      sick:'var(--text-secondary)', forest:'var(--nature-sage)', cache:'var(--mark-amber)',
-      ruin:'var(--text-primary)',   warden:'var(--text-primary)', den:'var(--sickness)',
-      grove:'var(--nature-sage)',   sanctum:'var(--mark-glow)',   haven:'var(--mark-amber)'
+      sick:    'var(--border)',
+      forest:  'var(--text-secondary)',
+      cache:   'var(--mark-amber)',
+      ruin:    'var(--memory-gold)',
+      warden:  'var(--memory-gold)',
+      den:     'var(--sickness)',
+      grove:   'var(--nature-sage)',
+      sanctum: 'var(--mark-glow)',
+      haven:   'var(--nature-sage)'
     };
 
     for (var row = 0; row < SIZE; row++) {
@@ -894,11 +972,9 @@ var Wilds = {
         } else if (Wilds._isExplored(wx, wy)) {
           var t = Wilds._getTile(wx, wy);
           cell.textContent = CHARS[t]  || '\u00b7';
-          cell.style.color = COLORS[t] || 'var(--text-secondary)';
+          cell.style.color = COLORS[t] || 'var(--border)';
         } else {
-          var adj = Math.abs(wx - px) <= 1 && Math.abs(wy - py) <= 1;
-          cell.textContent = adj ? '?' : ' ';
-          cell.style.color = 'var(--border)';
+          cell.textContent = ' '; /* unexplored: blank */
         }
         Wilds._mapEl.appendChild(cell);
       }
