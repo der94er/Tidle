@@ -80,7 +80,7 @@ var Haven = {
     storehouse:   { label: 'storehouse',     cost: { wood: 20, stone: 10 },                       time: 45000, prereq: null        },
     workshop:     { label: 'workshop',       cost: { wood: 20, stone: 10, iron: 10 },             time: 60000, prereq: null        },
     watchtower:   { label: 'watchtower',     cost: { stone: 15, iron: 10 },                       time: 60000, prereq: null        },
-    herbalistHut: { label: 'herbalist hut',  cost: { wood: 10, herbs: 5 },                        time: 30000, prereq: 'workshop'  },
+    herbalistHut: { label: 'herbalist hut',  cost: { wood: 10, herbs: 3 },                        time: 30000, prereq: 'workshop'  },
     tradingPost:  { label: 'trading post',   cost: { wood: 20, stone: 15, iron: 10, cloth: 5 },   time: 90000, prereq: 'workshop'  }
   },
 
@@ -869,12 +869,23 @@ var Haven = {
     Haven._makeGatherButton('gather wood',  'wood');
     Haven._makeGatherButton('gather stone', 'stone');
     Haven._makeStokeButton();
-    /* Phase E: inject active event buttons (trader etc) */
+    /* Gather herbs — green patch established at fire level 2+ */
+    if ($SM.get('game.fire.level', true) >= 2) {
+      Haven._makeGatherButton('gather herbs', 'herbs', 2, 4);
+    }
+    /* Salvage cloth — ruins have old fabric once workshop is built */
+    if ($SM.get('game.buildings.workshop')) {
+      Haven._makeGatherButton('salvage cloth', 'cloth', 1, 3);
+    }
     if (typeof Events !== 'undefined') Events._injectHavenButtons();
   },
 
-  /* GDD §3: 10s cooldown, 3-5 units. Night: +25% cooldown (GDD §5) */
-  _makeGatherButton: function(label, resource) {
+  /* GDD §3: 10s cooldown, 3-5 units. Night: +25% cooldown (GDD §5).
+     Optional min/max override the default gather range for herbs and cloth. */
+  _makeGatherButton: function(label, resource, min, max) {
+    var gMin = (min !== undefined) ? min : Haven.GATHER_MIN;
+    var gMax = (max !== undefined) ? max : Haven.GATHER_MAX;
+
     var btn = document.createElement('button');
     btn.className = 'action-btn visible';
     btn.dataset.resource = resource;
@@ -897,7 +908,7 @@ var Haven = {
         } else {
           clearInterval(countdown);
 
-          var amount  = Haven.GATHER_MIN + Math.floor(Math.random() * (Haven.GATHER_MAX - Haven.GATHER_MIN + 1));
+          var amount  = gMin + Math.floor(Math.random() * (gMax - gMin + 1));
           var cap     = $SM.get('game.buildings.storehouse') ? Haven.STOREHOUSE_CAP : Haven.BASE_STORE_CAP;
           var current = $SM.get('stores.' + resource, true);
 
@@ -945,6 +956,8 @@ var Haven = {
 
       Haven._updateFireDisplay();
       Haven._checkFireStrangerTrigger();
+      /* Show gather herbs button the moment fire reaches level 2 */
+      if (level < 2 && (level + 1) >= 2) Haven._buildButtons();
     });
 
     Haven._actionsEl.appendChild(btn);

@@ -151,6 +151,10 @@ The area around the fire is safe. The sickness can't reach it.
 
 Gathering takes 10 seconds real-time. Returns 3-5 units.
 
+When fire reaches level 2, the green patch has herbs growing. Button appears: [gather herbs] — 10 seconds, returns 2-4 herbs.
+
+Once workshop is built, ruins nearby have salvageable cloth. Button appears: [salvage cloth] — 10 seconds, returns 1-3 cloth.
+
 ```
 8:00  Fire needs feeding. If player ignores it:
       "the fire dims. the mark weakens. the black soil creeps closer."
@@ -413,7 +417,7 @@ This means:
 | Storehouse | 20 wood, 10 stone | 45s | — | Storage cap: 50 → 100 per resource. |
 | Workshop | 20 wood, 10 stone, 10 iron | 60s | — | Enables all crafting. |
 | Watchtower | 15 stone, 10 iron | 60s | — | Enables exploration. Warns of night creatures. |
-| Herbalist hut | 10 wood, 5 herbs | 30s | Workshop | Assigns herbalist. Auto-produces 1 medicine per game-day. |
+| Herbalist hut | 10 wood, 3 herbs | 30s | Workshop | Assigns herbalist. Auto-produces 1 medicine per game-day. |
 | Trading post | 20 wood, 15 stone, 10 iron, 5 cloth | 90s | Workshop | Travelers arrive every 5-8 game-days with goods. |
 
 ### Building rules
@@ -503,8 +507,8 @@ Each villager can be assigned to ONE task:
 ### Tile contents (pre-designed, not random)
 | Tile type | Count | What happens |
 |-----------|-------|-------------|
-| Sick land | 280 | Flavor text about the dying world. |
-| Dead forest | 30 | Can gather 5-10 wood here. |
+| Sick land | 280 | Flavor text about the dying world. 20% chance (first visit) to find 1-2 cloth in the ruins. |
+| Dead forest | 30 | Can gather 5-10 wood here. 20% chance to also find 1-2 cloth among the debris. |
 | Resource cache | 15 | Find 10-20 of a random resource. |
 | Ruin | 10 | Contains a memory of YOUR past. May have combat first. |
 | Warden camp | 5 | Previous mark-bearer's settlement. Contains their journal. |

@@ -258,6 +258,15 @@ var Wilds = {
     g[Wilds._key(x, y)] = true;
     $SM.set('game.map.gathered', g, true);
   },
+  /* Tracks which sick-land tiles already yielded their cloth find */
+  _isSickClothFound: function(x, y) {
+    return !!($SM.get('game.map.sickCloth') || {})[Wilds._key(x, y)];
+  },
+  _setSickClothFound: function(x, y) {
+    var sc = $SM.get('game.map.sickCloth') || {};
+    sc[Wilds._key(x, y)] = true;
+    $SM.set('game.map.sickCloth', sc, true);
+  },
 
   /* ----------------------------------------------------------------
      Movement (GDD §9)
@@ -344,6 +353,19 @@ var Wilds = {
         if (!Wilds._isCleared(x, y) && Math.random() < 0.08) {
           Engine.setTimeout(function() { Wilds._triggerCombat(x, y, 'fox', null); }, 600);
           return;
+        }
+        /* 20% chance to find 1-2 cloth on first visit — ruins of the fallen kingdom */
+        if (!Wilds._isSickClothFound(x, y) && Math.random() < 0.2) {
+          Wilds._setSickClothFound(x, y);
+          var sickSpace = Wilds.MAX_CARRY - Wilds._getCarryTotal();
+          if (sickSpace > 0) {
+            var sickCarry = $SM.get('game.carry') || {};
+            var sickCloth = Math.min(1 + Math.floor(Math.random() * 2), sickSpace);
+            sickCarry.cloth = (sickCarry.cloth || 0) + sickCloth;
+            $SM.set('game.carry', sickCarry, true);
+            Wilds._addLog(sickCloth + ' cloth found in the ruins.', 'timestamp');
+            Wilds._renderCarry();
+          }
         }
         break;
 
@@ -622,6 +644,13 @@ var Wilds = {
       var amt = Math.min(5 + Math.floor(Math.random() * 6), space);
       carry.wood = (carry.wood || 0) + amt;
       Wilds._addLog(amt + ' wood gathered.');
+      /* 20% chance to find 1-2 cloth among the ruins */
+      var spaceLeft = Wilds.MAX_CARRY - Wilds._getCarryTotal() - amt;
+      if (spaceLeft > 0 && Math.random() < 0.2) {
+        var cloth = Math.min(1 + Math.floor(Math.random() * 2), spaceLeft);
+        carry.cloth = (carry.cloth || 0) + cloth;
+        Wilds._addLog(cloth + ' cloth found among the debris.', 'timestamp');
+      }
     } else {
       /* GDD §9: 10-20 of random resource */
       var res  = ['wood','stone','iron','cloth','herbs','food'][Math.floor(Math.random() * 6)];
