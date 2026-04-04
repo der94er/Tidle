@@ -26,7 +26,7 @@ var StateManager = {
     ];
 
     for (var i = 0; i < cats.length; i++) {
-      if (!$SM.get(cats[i])) $SM.set(cats[i], {});
+      if (!$SM.get(cats[i])) $SM.set(cats[i], {}, true); /* noEvent — must not save during init */
     }
 
     Dispatch('stateUpdate').subscribe($SM.handleStateUpdates);
