@@ -1294,3 +1294,76 @@ score = (memories × 100)
       - (villagers_lost × 100)
       - (combat_retreats × 25)
 ```
+
+### §22.11 Instant Gathering with Cooldown Bar
+
+Gathering is now instant-click with a visual cooldown (no more wait-then-receive).
+
+**Amounts and cooldowns:**
+- gather wood: 1-3, 15s cooldown
+- gather stone: 1-3, 15s cooldown
+- gather herbs: 1-2, 15s cooldown
+- salvage cloth: 1-2, 15s cooldown
+- gather iron: 1-2, 20s cooldown (requires fire ≥ 3)
+
+**Night penalty:** +5s added to all cooldowns when `game.isNight` is true.
+
+**Visual:** Amber (#D4740A) bar below button fills left-to-right over the cooldown duration (CSS `transition: width Nms linear`). Button disabled during cooldown. Bar resets to 0% width (no transition) when cooldown expires.
+
+**CSS classes:** `.gather-btn-wrapper` (inline-block container), `.cooldown-bar` (2px height, `var(--mark-amber)` background).
+
+### §22.12 Separate Fire Decay Timer
+
+Fire decay is decoupled from the game-day tick.
+
+- **Without hearth:** fire drops 1 level every **5 real minutes**
+- **With hearth:** fire drops 1 level every **10 real minutes**
+- Wood and food consumption remain on the 2-minute game-day cycle (unchanged)
+
+**`FIRE_DECAY_MS`:** 5 × 60 × 1000 ms (haven.js constant)
+
+**`_fireDecayTick()`:** Standalone timer in `_timers.fireDecay`. Reschedules itself after each tick. Hearth check done at reschedule time (so building hearth mid-game takes effect on next tick).
+
+**Wilds log messages on decay (when player is in wilds):**
+- Level drops to 2: "a pull in your chest. the fire needs tending."
+- Level drops to 1: "the mark dims. your people are cold."
+- Level drops to 0: "the mark stutters. the connection thins."
+
+**Haven log messages:**
+- Level drops to 1: "the fire dims. the mark weakens. the black soil creeps closer."
+- Level drops to 0: "the fire dies. the mark holds alone. the green circle shrinks. the sickness presses close."
+
+### §22.13 Random Combat in the Wilds
+
+A random encounter can trigger every 3 moves while in the wilds.
+
+**Trigger conditions:**
+- Tile type must be `sick`, `forest`, or `cache` (skips POI, hazard, and sanctum tiles)
+- `game.wilds.moveCounter % 3 === 0` AND `Math.random() < 0.25` (25% chance)
+- Counter resets to 0 on haven return
+
+**Distance-based enemy selection** (Chebyshev-distance-like using `Math.sqrt(dx²+dy²)`):
+- ≤ 3 tiles: blighted fox
+- 4–6 tiles: blighted fox OR root crawler (50/50)
+- 7+ tiles: root crawler OR sickness shade (50/50)
+
+**`afterType`:** `'random'` — flee IS available. On win: tile not cleared, player stays. On loss (not fled): player returned to haven.
+
+### §22.14 Resource Drain Events
+
+When stores overflow, the land reclaims what isn't used.
+
+**Trigger:** Any resource exceeds 400. 30% chance per game-day.
+
+**Safety skip:** Never triggers if the player can currently afford any unbuilt building.
+
+**Drain amount:** 10–15% of the excess above 200 (minimum 1).
+
+**Flavor texts (one chosen at random):**
+- "a section of the storehouse collapses. some supplies are buried."
+- "the sickness seeps through a crack in the wall. some stores are ruined."
+- "a storm in the night. rain through the roof. some things are lost."
+- "rats. they found the stores. not much left of what they touched."
+- "the wood near the edge of the green has rotted. the sickness got to it."
+
+Log also prints: "[amount] [resource] lost."

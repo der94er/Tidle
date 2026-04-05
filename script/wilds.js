@@ -346,6 +346,9 @@ var Wilds = {
     Wilds._setExplored(nx, ny);
     $SM.set('playStats.tilesExplored', ($SM.get('playStats.tilesExplored') || 0) + 1, true);
 
+    /* Final Overhaul §13: increment random-combat move counter */
+    $SM.set('game.wilds.moveCounter', ($SM.get('game.wilds.moveCounter', true) || 0) + 1, true);
+
     /* Section 12: companion exploration comment */
     if ($SM.get('game.companion.alive') && $SM.get('game.companion.present')) {
       var moves = ($SM.get('game.companion.movesSinceComment') || 0) + 1;
@@ -555,6 +558,27 @@ var Wilds = {
           Wilds._addLog('the sanctum. the choice was made here.');
         }
         break;
+    }
+
+    /* Final Overhaul §13: random combat every 3 moves (25% chance) on safe tiles */
+    var _tile13 = Wilds._getTile(x, y);
+    if (_tile13 === 'sick' || _tile13 === 'forest' || _tile13 === 'cache') {
+      var _moves = $SM.get('game.wilds.moveCounter', true) || 0;
+      if (_moves > 0 && _moves % 3 === 0 && Math.random() < 0.25) {
+        var _dx   = x - Wilds.START_X;
+        var _dy   = y - Wilds.START_Y;
+        var _dist = Math.floor(Math.sqrt(_dx * _dx + _dy * _dy));
+        var _eKey;
+        if (_dist <= 3) {
+          _eKey = 'fox';
+        } else if (_dist <= 6) {
+          _eKey = Math.random() < 0.5 ? 'fox' : 'crawler';
+        } else {
+          _eKey = Math.random() < 0.5 ? 'crawler' : 'shade';
+        }
+        Engine.setTimeout(function() { Wilds._triggerCombat(x, y, _eKey, 'random'); }, 600);
+        return;
+      }
     }
 
     Wilds._buildActions();
@@ -1009,8 +1033,12 @@ var Wilds = {
     }
 
     Engine.setTimeout(function() {
-      Combat.start(enemy, x, y, afterType, function(won) {
-        if (won) {
+      Combat.start(enemy, x, y, afterType, function(won, fled) {
+        if (afterType === 'random') {
+          /* Random encounter — tile not cleared; player stays regardless */
+          if (!won && !fled) Wilds._returnToHaven();
+          else Wilds._buildActions();
+        } else if (won) {
           Wilds._setCleared(x, y);
           if (afterType === 'ruin')   Wilds._triggerRuinMemory();
           if (afterType === 'warden') Wilds._triggerWardenMemory();
@@ -1228,6 +1256,9 @@ var Wilds = {
     $SM.set('game.player.wounded', false, true);
     $SM.set('game.player.x',       Wilds.START_X, true);
     $SM.set('game.player.y',       Wilds.START_Y, true);
+
+    /* Final Overhaul §13: reset random-combat move counter on haven return */
+    $SM.set('game.wilds.moveCounter', 0, true);
 
     /* Section 3: return to haven mark reaction */
     Wilds._markReact('returnHaven', 'the mark steadies. home.');

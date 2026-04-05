@@ -178,6 +178,23 @@ html, body {
   pointer-events: none;
 }
 
+/* --- Final Overhaul §11: gather cooldown bar --- */
+.gather-btn-wrapper {
+  display: inline-block;
+  margin-right: 10px;
+  margin-bottom: 8px;
+}
+.gather-btn-wrapper .action-btn {
+  margin-right: 0;
+  margin-bottom: 0;
+  display: block;
+}
+.cooldown-bar {
+  height: 2px;
+  width: 0%;
+  background: var(--mark-amber);
+}
+
 /* --- Mark vision overlay (GDD §11) --- */
 /* "screen darkens slightly" — semi-transparent black */
 #markVisionOverlay {

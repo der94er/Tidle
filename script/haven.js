@@ -20,7 +20,7 @@ var Haven = {
   _popEl:       null,
   _evolEl:      null,
 
-  _timers: { gameDay: null, dayNight: null },
+  _timers: { gameDay: null, dayNight: null, fireDecay: null },
   _buildTimer: null,
 
   /* GDD §12 — fire level names */
@@ -29,16 +29,19 @@ var Haven = {
   /* GDD §12 — wood auto-consumed per game-day (indexed by fire level) */
   FIRE_WOOD_COST: [0, 0, 1, 1, 2, 3],
 
-  /* GDD §5 — 1 game-day = 2 real minutes (tightened in Final Overhaul §1) */
+  /* GDD §5 — 1 game-day = 2 real minutes (food/wood consumption cycle) */
   GAME_DAY_MS: 2 * 60 * 1000,
 
   /* GDD §5 — day/night toggle every half game-day = 60 seconds */
   HALF_DAY_MS: 60 * 1000,
 
-  /* GDD §3, §18 — gathering: 10s cooldown, 3-5 units returned */
-  GATHER_COOLDOWN_MS: 10 * 1000,
-  GATHER_MIN: 3,
-  GATHER_MAX: 5,
+  /* Final Overhaul §12 — fire decays 1 level every 5 real minutes */
+  FIRE_DECAY_MS: 5 * 60 * 1000,
+
+  /* Final Overhaul §11 — instant gather with cooldown (per-resource amounts below) */
+  GATHER_COOLDOWN_MS: 15 * 1000, /* default 15s; iron uses 20s; night adds 5s */
+  GATHER_MIN: 1,
+  GATHER_MAX: 3,
 
   /* GDD §4 — base storage cap 50, storehouse raises to 100 */
   BASE_STORE_CAP: 50,
@@ -238,33 +241,7 @@ var Haven = {
       if (actualCost > 0) $SM.add('stores.wood', -actualCost, true);
     }
 
-    /* Fire decays -1 level per game-day (GDD §12) */
-    if (level > 0) {
-      var newLevel = level - 1;
-      $SM.set('game.fire.level', newLevel, true);
-      Haven._updateFireDisplay();
-
-      /* Section 2F: ambient messages for player exploring when fire drops */
-      if (typeof Wilds !== 'undefined' && Engine.activeModule === Wilds) {
-        if (newLevel === 2) {
-          Wilds._addLog('a pull in your chest. the fire is weakening.', 'timestamp');
-        } else if (newLevel === 1) {
-          Wilds._addLog('the mark dims. the haven needs you.', 'timestamp');
-        } else if (newLevel === 0) {
-          Wilds._addLog('the mark stutters. the connection is thin. your people are in the dark.', 'timestamp');
-        }
-      }
-
-      if (newLevel === 0) {
-        /* GDD §12 exact text */
-        Haven._addLog('the fire dies. the mark holds alone. the green circle shrinks. the sickness presses close.');
-        $SM.set('game.fire.dead', true, true);
-      } else if (newLevel === 1) {
-        /* GDD §3 Phase 2 exact text */
-        Haven._addLog('the fire dims. the mark weakens. the black soil creeps closer.');
-        Haven._villagerReact('fireLow');
-      }
-    }
+    /* Fire decay now handled by _fireDecayTick (Final Overhaul §12) */
 
     /* GDD §4 — food: 1 per villager per game-day */
     Haven._consumeFood();
@@ -277,11 +254,13 @@ var Haven = {
     /* GDD §8 — trading post random arrivals */
     Haven._checkTradingPostArrival();
 
+    /* Final Overhaul §14: resource drain events */
+    Haven._checkResourceDrain();
+
     $SM.fireUpdate('stores', true);
 
-    /* Reschedule — hearth doubles the decay interval (GDD §6) */
-    var nextMs = $SM.get('game.buildings.hearth') ? Haven.GAME_DAY_MS * 2 : Haven.GAME_DAY_MS;
-    Haven._timers.gameDay = Engine.setTimeout(Haven._gameDayTick, nextMs);
+    /* Reschedule — game-day interval is fixed; fire decay handled separately */
+    Haven._timers.gameDay = Engine.setTimeout(Haven._gameDayTick, Haven.GAME_DAY_MS);
   },
 
   /* GDD §5 — day/night toggle every 90 real seconds */
@@ -304,11 +283,44 @@ var Haven = {
     Haven._timers.dayNight = Engine.setTimeout(Haven._dayNightTick, Haven.HALF_DAY_MS);
   },
 
+  /* Final Overhaul §12: fire decays 1 level every 5 min (10 min with hearth) */
+  _fireDecayTick: function() {
+    var level = $SM.get('game.fire.level', true);
+    if (level > 0) {
+      var newLevel = level - 1;
+      $SM.set('game.fire.level', newLevel, true);
+      Haven._updateFireDisplay();
+
+      /* §7: ambient messages for player in the wilds */
+      if (typeof Wilds !== 'undefined' && Engine.activeModule === Wilds) {
+        if (newLevel === 2) {
+          Wilds._addLog('a pull in your chest. the fire needs tending.', 'timestamp');
+        } else if (newLevel === 1) {
+          Wilds._addLog('the mark dims. your people are cold.', 'timestamp');
+        } else if (newLevel === 0) {
+          Wilds._addLog('the mark stutters. the connection thins.', 'timestamp');
+        }
+      }
+
+      if (newLevel === 0) {
+        Haven._addLog('the fire dies. the mark holds alone. the green circle shrinks. the sickness presses close.');
+        $SM.set('game.fire.dead', true, true);
+      } else if (newLevel === 1) {
+        Haven._addLog('the fire dims. the mark weakens. the black soil creeps closer.');
+        Haven._villagerReact('fireLow');
+      }
+    }
+
+    var nextDecay = $SM.get('game.buildings.hearth') ? Haven.FIRE_DECAY_MS * 2 : Haven.FIRE_DECAY_MS;
+    Haven._timers.fireDecay = Engine.setTimeout(Haven._fireDecayTick, nextDecay);
+  },
+
   _startTimers: function() {
     Haven._pauseTimers();
-    var dayMs = $SM.get('game.buildings.hearth') ? Haven.GAME_DAY_MS * 2 : Haven.GAME_DAY_MS;
-    Haven._timers.gameDay  = Engine.setTimeout(Haven._gameDayTick,  dayMs);
-    Haven._timers.dayNight = Engine.setTimeout(Haven._dayNightTick, Haven.HALF_DAY_MS);
+    Haven._timers.gameDay   = Engine.setTimeout(Haven._gameDayTick,   Haven.GAME_DAY_MS);
+    Haven._timers.dayNight  = Engine.setTimeout(Haven._dayNightTick,  Haven.HALF_DAY_MS);
+    var decayMs = $SM.get('game.buildings.hearth') ? Haven.FIRE_DECAY_MS * 2 : Haven.FIRE_DECAY_MS;
+    Haven._timers.fireDecay = Engine.setTimeout(Haven._fireDecayTick, decayMs);
   },
 
   pauseTimers: function() {
@@ -322,8 +334,9 @@ var Haven = {
   },
 
   _pauseTimers: function() {
-    if (Haven._timers.gameDay)  { clearTimeout(Haven._timers.gameDay);  Haven._timers.gameDay  = null; }
-    if (Haven._timers.dayNight) { clearTimeout(Haven._timers.dayNight); Haven._timers.dayNight = null; }
+    if (Haven._timers.gameDay)   { clearTimeout(Haven._timers.gameDay);   Haven._timers.gameDay   = null; }
+    if (Haven._timers.dayNight)  { clearTimeout(Haven._timers.dayNight);  Haven._timers.dayNight  = null; }
+    if (Haven._timers.fireDecay) { clearTimeout(Haven._timers.fireDecay); Haven._timers.fireDecay = null; }
   },
 
   /* ----------------------------------------------------------------
@@ -937,20 +950,21 @@ var Haven = {
 
   _buildButtons: function() {
     Haven._actionsEl.innerHTML = '';
-    Haven._makeGatherButton('gather wood',  'wood');
-    Haven._makeGatherButton('gather stone', 'stone');
+    /* §11: instant 1-3 units, 15s cooldown */
+    Haven._makeGatherButton('gather wood',  'wood',  1, 3, 15000);
+    Haven._makeGatherButton('gather stone', 'stone', 1, 3, 15000);
     Haven._makeStokeButton();
     /* Gather herbs — green patch established at fire level 2+ */
     if ($SM.get('game.fire.level', true) >= 2) {
-      Haven._makeGatherButton('gather herbs', 'herbs', 2, 4);
+      Haven._makeGatherButton('gather herbs', 'herbs', 1, 2, 15000);
     }
     /* Salvage cloth — ruins have old fabric once workshop is built */
     if ($SM.get('game.buildings.workshop')) {
-      Haven._makeGatherButton('salvage cloth', 'cloth', 1, 3);
+      Haven._makeGatherButton('salvage cloth', 'cloth', 1, 2, 15000);
     }
-    /* Final Overhaul §8: gather iron when fire ≥ 3 (anti-softlock) */
+    /* Final Overhaul §8: gather iron when fire ≥ 3 (anti-softlock); §11: 1-2 units, 20s */
     if ($SM.get('game.fire.level', true) >= 3) {
-      Haven._makeGatherButton('gather iron', 'iron', 1, 3, 15000);
+      Haven._makeGatherButton('gather iron', 'iron', 1, 2, 20000);
     }
     /* Final Overhaul §2: auto-structure build buttons */
     Object.keys(Haven.AUTO_STRUCTURES).forEach(function(key) {
@@ -961,59 +975,69 @@ var Haven = {
     if (typeof Events !== 'undefined') Events._injectHavenButtons();
   },
 
-  /* GDD §3: 10s cooldown, 3-5 units. Night: +25% cooldown (GDD §5).
-     Optional min/max override the default gather range for herbs and cloth.
-     Optional cooldownMs overrides the default cooldown (used by iron gather). */
+  /* Final Overhaul §11: instant-click gather with cooldown bar.
+     Resources awarded immediately; button goes on cooldown afterward.
+     Night: +5s to all cooldowns. */
   _makeGatherButton: function(label, resource, min, max, cooldownMs) {
-    var gMin        = (min !== undefined)       ? min       : Haven.GATHER_MIN;
-    var gMax        = (max !== undefined)       ? max       : Haven.GATHER_MAX;
+    var gMin         = (min        !== undefined) ? min        : Haven.GATHER_MIN;
+    var gMax         = (max        !== undefined) ? max        : Haven.GATHER_MAX;
     var baseCooldown = (cooldownMs !== undefined) ? cooldownMs : Haven.GATHER_COOLDOWN_MS;
 
+    var wrapper = document.createElement('div');
+    wrapper.className = 'gather-btn-wrapper';
+
     var btn = document.createElement('button');
-    btn.className = 'action-btn visible';
+    btn.className        = 'action-btn visible';
     btn.dataset.resource = resource;
-    btn.textContent = label;
+    btn.textContent      = label;
+
+    var bar = document.createElement('div');
+    bar.className = 'cooldown-bar';
+
+    wrapper.appendChild(btn);
+    wrapper.appendChild(bar);
 
     btn.addEventListener('click', function() {
       if (btn.disabled) return;
+
+      /* Instant resource award */
+      var amount  = gMin + Math.floor(Math.random() * (gMax - gMin + 1));
+      var cap     = $SM.get('game.buildings.storehouse') ? Haven.STOREHOUSE_CAP : Haven.BASE_STORE_CAP;
+      var current = $SM.get('stores.' + resource, true);
+
+      if (current >= cap) {
+        Notifications.notify(Haven, 'stores are full. resources wasted.');
+      } else {
+        $SM.add('stores.' + resource, Math.min(amount, cap - current));
+      }
+
+      /* Final Overhaul §2: track gather count for auto-structure unlock */
+      var count = ($SM.get('game.gatherCounts.' + resource) || 0) + 1;
+      $SM.set('game.gatherCounts.' + resource, count, true);
+      Haven._checkAutoStructureUnlock(resource);
+
+      /* Start cooldown — night adds 5 seconds */
+      var isNight = $SM.get('game.isNight') || false;
+      var totalMs = baseCooldown + (isNight ? 5000 : 0);
+
       btn.disabled = true;
+      bar.style.transition = 'none';
+      bar.style.width      = '0%';
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          bar.style.transition = 'width ' + totalMs + 'ms linear';
+          bar.style.width      = '100%';
+        });
+      });
 
-      var isNight   = $SM.get('game.isNight') || false;
-      var totalMs   = isNight ? Math.ceil(baseCooldown * 1.25) : baseCooldown;
-      var remaining = Math.ceil(totalMs / 1000);
-
-      btn.textContent = label + ' (' + remaining + 's)';
-
-      var countdown = Engine.setInterval(function() {
-        remaining--;
-        if (remaining > 0) {
-          btn.textContent = label + ' (' + remaining + 's)';
-        } else {
-          clearInterval(countdown);
-
-          var amount  = gMin + Math.floor(Math.random() * (gMax - gMin + 1));
-          var cap     = $SM.get('game.buildings.storehouse') ? Haven.STOREHOUSE_CAP : Haven.BASE_STORE_CAP;
-          var current = $SM.get('stores.' + resource, true);
-
-          if (current >= cap) {
-            /* GDD §18 exact text */
-            Notifications.notify(Haven, 'stores are full. resources wasted.');
-          } else {
-            $SM.add('stores.' + resource, Math.min(amount, cap - current));
-          }
-
-          /* Final Overhaul §2: track gather count for auto-structure unlock */
-          var count = ($SM.get('game.gatherCounts.' + resource) || 0) + 1;
-          $SM.set('game.gatherCounts.' + resource, count, true);
-          Haven._checkAutoStructureUnlock(resource);
-
-          btn.disabled    = false;
-          btn.textContent = label;
-        }
-      }, 1000);
+      Engine.setTimeout(function() {
+        btn.disabled         = false;
+        bar.style.transition = 'none';
+        bar.style.width      = '0%';
+      }, totalMs);
     });
 
-    Haven._actionsEl.appendChild(btn);
+    Haven._actionsEl.appendChild(wrapper);
     return btn;
   },
 
@@ -1059,6 +1083,48 @@ var Haven = {
       Haven._buildButtons();
       $SM.fireUpdate('stores', true);
     }, s.time);
+  },
+
+  /* Final Overhaul §14: resource drain events */
+  _checkResourceDrain: function() {
+    var RESOURCES   = ['wood', 'stone', 'iron', 'cloth', 'herbs', 'food'];
+    var THRESHOLD   = 400;
+    var DRAIN_FLOOR = 200;
+    var DRAIN_TEXTS = [
+      'a section of the storehouse collapses. some supplies are buried.',
+      'the sickness seeps through a crack in the wall. some stores are ruined.',
+      'a storm in the night. rain through the roof. some things are lost.',
+      'rats. they found the stores. not much left of what they touched.',
+      'the wood near the edge of the green has rotted. the sickness got to it.'
+    ];
+
+    /* Check if any resource exceeds threshold */
+    var overflowing = RESOURCES.filter(function(r) {
+      return ($SM.get('stores.' + r, true) || 0) > THRESHOLD;
+    });
+    if (overflowing.length === 0) return;
+
+    /* 30% chance per game-day */
+    if (Math.random() > 0.30) return;
+
+    /* Safety: skip if player can afford any unbuilt building */
+    var canAffordUnbuilt = Object.keys(Haven.BUILDINGS).some(function(key) {
+      return !$SM.get('game.buildings.' + key) && Haven._canAfford(Haven.BUILDINGS[key].cost);
+    });
+    if (canAffordUnbuilt) return;
+
+    /* Pick a random overflowing resource and drain 10-15% of excess above DRAIN_FLOOR */
+    var r       = overflowing[Math.floor(Math.random() * overflowing.length)];
+    var current = $SM.get('stores.' + r, true) || 0;
+    var excess  = Math.max(0, current - DRAIN_FLOOR);
+    var pct     = 0.10 + Math.random() * 0.05; /* 10-15% */
+    var drain   = Math.max(1, Math.floor(excess * pct));
+
+    $SM.add('stores.' + r, -drain, true);
+
+    var text = DRAIN_TEXTS[Math.floor(Math.random() * DRAIN_TEXTS.length)];
+    Haven._addLog(text);
+    Haven._addLog(drain + ' ' + r + ' lost.', 'timestamp');
   },
 
   /* GDD §12: stoke costs 1 wood, raises fire +1 level (max 5) */
