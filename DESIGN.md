@@ -1057,3 +1057,240 @@ score = (memories × 100)
 - Torch charges: 100 charges per regular craft batch. 12×12 needs ~100-150 charges typical run. ✓
 - Companion: max pop 10, companion removed → effective haven pop 9. Lodge still required. ✓
 - Score formula: theoretical max increases by ~620 (25 healed + companion alive). Still bounded. ✓
+
+---
+
+## §22 FINAL GAMEPLAY OVERHAUL
+
+*All changes implemented. Text sourced verbatim from §22 specification.*
+
+### §22.1 Tighter Resource Economy
+- **GAME_DAY_MS**: 3 min → 2 min (haven.js)
+- **HALF_DAY_MS**: 90s → 60s (haven.js)
+- **Villager production rates** (haven.js `_setVillagerIncome`):
+  - woodcutter: 1/10s → 1/20s
+  - stonecutter: 1/10s → 1/20s
+  - miner: 1/15s → 1/30s
+  - hunter: 1/10s → 1/15s
+  - herbalist: 1/20s → 1/30s
+- **Manual gathering**: unchanged (wood/stone 10s 3-5, herbs 10s 2-4, cloth 10s 1-3, iron 15s 1-3)
+- Food consumption increases naturally (shorter game-day = more frequent consumption)
+
+### §22.2 Auto-Gathering Progression
+After 8 manual gathers of a resource, a one-time build button appears in the actions area.
+
+| Structure | Trigger | Cost | Build Time | Passive Output |
+|---|---|---|---|---|
+| build woodpile | 8 wood gathers | 10 wood, 5 stone | 30s | +1 wood / 45s |
+| mark a quarry | 8 stone gathers | 5 stone, 5 iron | 30s | +1 stone / 45s |
+| tend a garden | 8 herb gathers | 5 herbs, 5 wood | 30s | +1 herbs / 60s |
+| shore up the mine | 8 iron gathers | 10 iron, 5 wood | 30s | +1 iron / 60s |
+
+Completion messages:
+- woodpile: "a woodpile. the scraps add up."
+- quarry: "a quarry marker. the stone comes easier now."
+- garden: "a small garden in the green patch. life persists."
+- mine: "the mine holds. iron flows."
+
+Income keys: `auto_woodpile`, `auto_quarryMarker`, `auto_garden`, `auto_mineShoreUp`
+State keys: `game.autoStructures.[key].shown`, `game.autoStructures.[key].built`
+Gather counts: `game.gatherCounts.[resource]`
+
+### §22.3 Haven "Whoa" Moments
+
+**Event 1 — The Buried Weapon** (3 buildings constructed):
+```
+a villager calls out. something in the dirt.
+a sword. rusted. broken. but real.
+something used this. something that fights.
+threats exist beyond the green patch.
+```
+Effect: adds 5 iron to stores. State key: `game.whoa.buriedWeapon`
+
+**Event 2 — The First Night Attack** (5 villagers, no watchtower):
+Before this event fires, night attacks are disabled. Triggers on next night:
+```
+screaming. darkness at the edge of the green.
+something came in the night. the stores are torn open.
+the sickness has teeth.
+```
+Effect: lose 5-10 food. Night attacks enabled afterward.
+State keys: `game.whoa.firstNightAttackArmed`, `game.whoa.nightAttackEnabled`
+
+**Event 3 — The Watchtower View** (watchtower built):
+```
+you climb the watchtower. the world opens up.
+ruins stretch to the horizon. dark soil. dead rivers.
+but to the east — something. structure. old stone.
+to the south — a patch of green. impossible.
+the wilds are vast. and full of answers.
+```
+State key: (watchtower building = trigger)
+
+**Event 4 — The Unsettling Stranger** (7 villagers):
+```
+a stranger arrives. different from the others.
+she doesn't sit by the fire. she stares at the mark.
+'you're the last one,' she says. 'the very last.'
+she won't say more. she works. but she watches.
+```
+Effect: villager joins with forced `spiritual` trait. State key: `game.whoa.unsettlingStranger`
+
+**Event 5 — The Dream** (10 memories found):
+```
+you wake gasping. the mark burns.
+a flash — a face. a room. a decision.
+the dream fades. but the feeling doesn't.
+something is pulling you. deeper into the wilds.
+```
+State key: `game.whoa.theDream`
+
+### §22.4 Simpler Map Visual
+- POI letters hidden on minimap until tile is explored (stepped on)
+- Adjacent unexplored non-sick tiles show as `?` in amber (#D4740A)
+- Map legend removed entirely
+- Player `@` (amber) and haven `H` (sage) always visible
+
+### §22.5 Micro-Interactions on Sick Tiles
+30% chance on first visit to a sick tile (one-time, tracked in `game.map.microEvent`).
+Four events, chosen randomly:
+
+**Collapsed cart:**
+```
+a collapsed cart. something underneath.
+```
+[search] / [move on]
+- 60%: 2-4 random resources
+- 30%: "rubble. nothing useful."
+- 10%: story fragment (one of 5)
+
+Story fragments: "scratched into the cart: 'heading north. the mark-bearer will protect us.'" | "a doll. small. left behind in haste." | "a merchant's ledger. the last entry is a prayer." | "dried flowers, pressed between stones. someone remembered beauty." | "a map. crude. the ink has bled. but a circle — here. where you stand."
+
+**Old well:**
+```
+an old well. the rope is frayed.
+```
+[lower a bucket] / [move on]
+- 50%: 3-5 herbs
+- 30%: "the rope gives way. the bucket is gone."
+- 20%: 1 cloth
+
+**Cellar door:**
+```
+a cellar door. sealed with rust.
+```
+[force it open] / [leave it]
+- 40%: 5-8 food
+- 40%: 2-4 iron
+- 20%: ambush blighted fox (no flee)
+
+**Grave marker:**
+```
+a grave marker. recent.
+```
+[pay respects] / [move on]
+- Outcome: "you kneel. the mark flickers. recognition." / "this one carried the mark too. a long time ago."
+- Effect: +1 `playStats.graveRespects` (scores +5 per respect paid)
+
+### §22.6 Environmental Hazards
+8 pre-placed hazard tiles. Trigger once; after resolution show short flavor text on revisit.
+
+Tile positions (added to MAP_LAYOUT):
+- chasm: (3,4) and (8,7)
+- fog: (5,2) and (6,8)
+- bridge: (3,6) and (10,9)
+- thorns: (2,6) and (7,10)
+
+**Chasm:** "a crack in the earth. wide. deep. the sickness oozes from below."
+- [cross on the fallen tree] — safe, -2 food
+- [jump] — 70% safe; 30% -20 health
+- [go around] — -2 food
+
+**Sick fog:** "a low fog. thick. the mark dims in it."
+- [push through] — -3 torch charges (free with lantern)
+- [wait for it to pass] — -1 food
+- [find another way] — -2 food
+
+**Collapsed bridge:** "a river of black water. a bridge, half-collapsed."
+- [climb across the ruins] — 80%: safe (50% chance 2 iron); 20%: -10 health, lose 3 resources
+- [wade through] — safe, -5 health
+- [search for a crossing] — safe, -2 food
+
+**Thorn wall:** "twisted thorns. black. dense. they grew from the sickness."
+- [cut through] — requires weapon, -1 food
+- [burn through] — -3 torch charges (free with lantern)
+- [go around] — -2 food
+
+### §22.7 Return Summary
+Departure state captured on Wilds.onArrival: `game.wildsDeparture = {fireLevel, popCount, food}`
+
+On `_returnToHaven()`, comparison shown in haven log:
+- Fire dropped: "the fire burned low."
+- Villager(s) left: "someone left." / "N people left."
+- No change: "the fire burns. the people are fed. all is well."
+
+### §22.8 Iron Gathering (Soft-Lock Fix)
+[gather iron] button visible in haven actions when fire level ≥ 3.
+- Cooldown: 15 seconds
+- Yield: 1-3 iron
+- Text: "iron scraps from the ruins. bent, but usable." (shown in gather area)
+- Counts toward `game.gatherCounts.iron` for §22.2 auto-structure unlock
+
+### §22.9 Replay Value — Persistent Tracker
+localStorage key: `lastEmber_persistent`
+
+Tracks across all playthroughs:
+- `totalMemories`: highest single-run memory count seen
+- `completedRuns`: number of completed runs
+- `endingsSeen`: array of ending types seen ("seal", "break")
+
+Display on leaderboard screen after first completion:
+```
+memories recovered: X/25 across all journeys.
+journeys completed: N
+endings witnessed: [seal/break]
+```
+Special messages:
+- Both endings seen: "both paths walked. the full truth is known."
+- All 25 memories found: "every memory recovered. nothing is forgotten."
+
+Play-again button text after first completion: "begin another journey. you will forget again. but the land remembers."
+
+### §22.10 Combat Variety
+
+**Opening lines** (randomized per encounter):
+
+Fox: "a fox. twisted. it snarls at the light." / "red eyes in the brush. small. fast." / "the mark flickers. something is close. a fox, corrupted."
+
+Root crawler: "the ground shifts. roots rise. reaching." / "twisted wood and sick soil, moving with purpose." / "it was a tree once. now it hungers."
+
+Sickness shade: "the air thickens. a shape in the murk." / "darkness condenses. takes form. watches." / "a shade. the sickness given shape. it keens."
+
+Corrupted guardian: "stone grinds. the guardian wakes." / "ancient eyes open in the rock. still guarding. still bound." / "the sentinel stirs. it does not recognize you."
+
+**Victory lines** (pick one randomly):
+- "it falls. the mark dims. quiet returns."
+- "done. the corruption bleeds into the soil and vanishes."
+- "the creature crumbles. the land sighs."
+
+**Defeat lines** (pick one randomly):
+- "darkness. then the haven. you're alive. barely."
+- "you wake by the fire. wounded. everything you carried is gone."
+- "the mark flares. drags you home. you don't remember how."
+
+### §22 Score Formula Update
+```
+score = (memories × 100)
+      + (buildings × 50)
+      + (max_population × 25)
+      + (combat_wins × 15)
+      + (tiles_explored × 2)
+      + (days_survived × 3)
+      + (extra_mark_fragments × 50)
+      + (seal_ending × 500)
+      + (creatures_healed × 20)
+      + (grave_respects × 5)         ← NEW §22
+      + companion_bonus (+100 alive / -150 died / 0 not taken)
+      - (villagers_lost × 100)
+      - (combat_retreats × 25)
+```

@@ -67,6 +67,12 @@ var Engine = {
     $SM.init();
     Notifications.init();
 
+    /* Final Overhaul §9: show persistent cross-playthrough tracker */
+    if (typeof Leaderboard !== 'undefined') {
+      var trackerContainer = document.getElementById('main');
+      if (trackerContainer) Leaderboard.showPersistent(trackerContainer);
+    }
+
     /* Load or init game state */
     Engine.loadGame();
 

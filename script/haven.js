@@ -29,11 +29,11 @@ var Haven = {
   /* GDD §12 — wood auto-consumed per game-day (indexed by fire level) */
   FIRE_WOOD_COST: [0, 0, 1, 1, 2, 3],
 
-  /* GDD §5 — 1 game-day = 3 real minutes */
-  GAME_DAY_MS: 3 * 60 * 1000,
+  /* GDD §5 — 1 game-day = 2 real minutes (tightened in Final Overhaul §1) */
+  GAME_DAY_MS: 2 * 60 * 1000,
 
-  /* GDD §5 — day/night toggle every half game-day = 90 seconds */
-  HALF_DAY_MS: 90 * 1000,
+  /* GDD §5 — day/night toggle every half game-day = 60 seconds */
+  HALF_DAY_MS: 60 * 1000,
 
   /* GDD §3, §18 — gathering: 10s cooldown, 3-5 units returned */
   GATHER_COOLDOWN_MS: 10 * 1000,
@@ -98,6 +98,14 @@ var Haven = {
     { id: 'trap',            label: 'trap (\xd73)',             cost: { iron: 5, wood: 5 },              req: 'workshop',     qty: 3,  inv: 'traps',              stack: true  },
     { id: 'markLantern',     label: 'mark lantern',             cost: { iron: 3, cloth: 2, markFragments: 1 }, req: 'forge', qty: 1,  inv: 'markLantern',        stack: false }
   ],
+
+  /* Final Overhaul §2 — auto-gathering structures (unlock after 8 manual gathers) */
+  AUTO_STRUCTURES: {
+    woodpile:     { resource: 'wood',  label: 'build woodpile',      cost: { wood: 10, stone: 5 }, time: 30000, income: { stores: { wood:  1 }, delay: 45 }, msg: 'a woodpile. the scraps add up.' },
+    quarryMarker: { resource: 'stone', label: 'mark a quarry',        cost: { stone: 5, iron: 5 },  time: 30000, income: { stores: { stone: 1 }, delay: 45 }, msg: 'a quarry marker. the stone comes easier now.' },
+    garden:       { resource: 'herbs', label: 'tend a garden',        cost: { herbs: 5, wood: 5 },  time: 30000, income: { stores: { herbs: 1 }, delay: 60 }, msg: 'a small garden in the green patch. life persists.' },
+    mineShoreUp:  { resource: 'iron',  label: 'shore up the mine',    cost: { iron: 10, wood: 5 },  time: 30000, income: { stores: { iron:  1 }, delay: 60 }, msg: 'the mine holds. iron flows.' }
+  },
 
   /* --- Module lifecycle --- */
 
@@ -500,14 +508,23 @@ var Haven = {
     };
     if (logs[key]) Haven._addLog(logs[key]);
 
-    /* Watchtower extra line (GDD §3 Phase 2) + unlock wilds tab */
+    /* Watchtower: Final Overhaul §3 Event 3 — revelation view */
     if (key === 'watchtower') {
-      Haven._addLog('ruins. sick land. but in the distance \u2014 structures. old ones.');
       if (typeof Wilds !== 'undefined') Wilds.unlock();
+      Engine.setTimeout(function() {
+        Haven._addLog('you climb the watchtower. the world opens up.');
+        Haven._addLog('ruins stretch to the horizon. dark soil. dead rivers.', 'timestamp');
+        Haven._addLog('but to the east \u2014 something. structure. old stone.', 'timestamp');
+        Haven._addLog('to the south \u2014 a patch of green. impossible.', 'timestamp');
+        Haven._addLog('the wilds are vast. and full of answers.', 'timestamp');
+      }, 1500);
     }
 
     /* Villager triggers for this building */
     Haven._onBuildingComplete(key);
+
+    /* Check whoa moments */
+    Haven._checkWhoaMoments();
 
     /* Refresh UI */
     Haven._buildBuildingButtons();
@@ -779,11 +796,11 @@ var Haven = {
   /* GDD §8 — production rates per role */
   _setVillagerIncome: function(idx, role) {
     var rates = {
-      woodcutter:  { stores: { wood:  1 }, delay: 10 },
-      stonecutter: { stores: { stone: 1 }, delay: 10 },
-      miner:       { stores: { iron:  1 }, delay: 15 },
-      hunter:      { stores: { food:  1 }, delay: 10 },
-      herbalist:   { stores: { herbs: 1 }, delay: 20 }
+      woodcutter:  { stores: { wood:  1 }, delay: 20 },
+      stonecutter: { stores: { stone: 1 }, delay: 20 },
+      miner:       { stores: { iron:  1 }, delay: 30 },
+      hunter:      { stores: { food:  1 }, delay: 15 },
+      herbalist:   { stores: { herbs: 1 }, delay: 30 }
     };
     var entry = rates[role];
     if (!entry) return; /* idle, guard — no production */
@@ -931,14 +948,26 @@ var Haven = {
     if ($SM.get('game.buildings.workshop')) {
       Haven._makeGatherButton('salvage cloth', 'cloth', 1, 3);
     }
+    /* Final Overhaul §8: gather iron when fire ≥ 3 (anti-softlock) */
+    if ($SM.get('game.fire.level', true) >= 3) {
+      Haven._makeGatherButton('gather iron', 'iron', 1, 3, 15000);
+    }
+    /* Final Overhaul §2: auto-structure build buttons */
+    Object.keys(Haven.AUTO_STRUCTURES).forEach(function(key) {
+      var shown = $SM.get('game.autoStructures.' + key + '.shown');
+      var built = $SM.get('game.autoStructures.' + key + '.built');
+      if (shown && !built) Haven._makeAutoStructureButton(key, Haven.AUTO_STRUCTURES[key]);
+    });
     if (typeof Events !== 'undefined') Events._injectHavenButtons();
   },
 
   /* GDD §3: 10s cooldown, 3-5 units. Night: +25% cooldown (GDD §5).
-     Optional min/max override the default gather range for herbs and cloth. */
-  _makeGatherButton: function(label, resource, min, max) {
-    var gMin = (min !== undefined) ? min : Haven.GATHER_MIN;
-    var gMax = (max !== undefined) ? max : Haven.GATHER_MAX;
+     Optional min/max override the default gather range for herbs and cloth.
+     Optional cooldownMs overrides the default cooldown (used by iron gather). */
+  _makeGatherButton: function(label, resource, min, max, cooldownMs) {
+    var gMin        = (min !== undefined)       ? min       : Haven.GATHER_MIN;
+    var gMax        = (max !== undefined)       ? max       : Haven.GATHER_MAX;
+    var baseCooldown = (cooldownMs !== undefined) ? cooldownMs : Haven.GATHER_COOLDOWN_MS;
 
     var btn = document.createElement('button');
     btn.className = 'action-btn visible';
@@ -950,7 +979,7 @@ var Haven = {
       btn.disabled = true;
 
       var isNight   = $SM.get('game.isNight') || false;
-      var totalMs   = isNight ? Math.ceil(Haven.GATHER_COOLDOWN_MS * 1.25) : Haven.GATHER_COOLDOWN_MS;
+      var totalMs   = isNight ? Math.ceil(baseCooldown * 1.25) : baseCooldown;
       var remaining = Math.ceil(totalMs / 1000);
 
       btn.textContent = label + ' (' + remaining + 's)';
@@ -973,6 +1002,11 @@ var Haven = {
             $SM.add('stores.' + resource, Math.min(amount, cap - current));
           }
 
+          /* Final Overhaul §2: track gather count for auto-structure unlock */
+          var count = ($SM.get('game.gatherCounts.' + resource) || 0) + 1;
+          $SM.set('game.gatherCounts.' + resource, count, true);
+          Haven._checkAutoStructureUnlock(resource);
+
           btn.disabled    = false;
           btn.textContent = label;
         }
@@ -981,6 +1015,50 @@ var Haven = {
 
     Haven._actionsEl.appendChild(btn);
     return btn;
+  },
+
+  /* Final Overhaul §2: check if an auto-structure should be revealed */
+  _checkAutoStructureUnlock: function(resource) {
+    var count = $SM.get('game.gatherCounts.' + resource) || 0;
+    if (count < 8) return;
+    var structKey = null;
+    Object.keys(Haven.AUTO_STRUCTURES).forEach(function(k) {
+      if (Haven.AUTO_STRUCTURES[k].resource === resource) structKey = k;
+    });
+    if (!structKey) return;
+    if ($SM.get('game.autoStructures.' + structKey + '.shown')) return;
+    if ($SM.get('game.autoStructures.' + structKey + '.built'))  return;
+    $SM.set('game.autoStructures.' + structKey + '.shown', true, true);
+    Haven._buildButtons();
+  },
+
+  /* Final Overhaul §2: render an auto-structure build button */
+  _makeAutoStructureButton: function(key, s) {
+    var costParts = Object.keys(s.cost).map(function(r) { return s.cost[r] + ' ' + r; });
+    var btn = document.createElement('button');
+    btn.className   = 'action-btn visible';
+    btn.textContent = s.label + ' (' + costParts.join(', ') + ')';
+    btn.disabled    = !Haven._canAfford(s.cost);
+    btn.addEventListener('click', function() {
+      if (btn.disabled) return;
+      Haven._buildAutoStructure(key, s, btn);
+    });
+    Haven._actionsEl.appendChild(btn);
+  },
+
+  /* Final Overhaul §2: execute an auto-structure build */
+  _buildAutoStructure: function(key, s, btn) {
+    if (!Haven._canAfford(s.cost)) return;
+    for (var r in s.cost) { $SM.add('stores.' + r, -s.cost[r], true); }
+    btn.disabled    = true;
+    btn.textContent = s.label + ' (building\u2026)';
+    Engine.setTimeout(function() {
+      $SM.set('game.autoStructures.' + key + '.built', true, true);
+      Haven._addLog(s.msg);
+      $SM.setIncome('auto_' + key, s.income);
+      Haven._buildButtons();
+      $SM.fireUpdate('stores', true);
+    }, s.time);
   },
 
   /* GDD §12: stoke costs 1 wood, raises fire +1 level (max 5) */
@@ -1126,6 +1204,64 @@ var Haven = {
       Haven._buildCraftingButtons();
       Haven._updateEvolText();
       Haven._checkCompanionTrigger();
+      Haven._checkWhoaMoments();
+    }
+  },
+
+  /* Final Overhaul §3: scripted "whoa" moments */
+  _checkWhoaMoments: function() {
+    if ($SM.get('game.grave.phase', true) < 5) return;
+
+    /* Event 1: 3 buildings → buried weapon */
+    if (!$SM.get('game.whoa.buriedWeapon')) {
+      var bCount = 0;
+      ['hearth','forge','hut','lodge','storehouse','workshop','watchtower','herbalistHut','tradingPost']
+        .forEach(function(k) { if ($SM.get('game.buildings.' + k)) bCount++; });
+      if (bCount >= 3) {
+        $SM.set('game.whoa.buriedWeapon', true, true);
+        Engine.setTimeout(function() {
+          Haven._addLog('a villager calls out. something in the dirt.');
+          Haven._addLog('a sword. rusted. broken. but real.', 'timestamp');
+          Haven._addLog('something used this. something that fights.', 'timestamp');
+          Haven._addLog('threats exist beyond the green patch.', 'timestamp');
+          $SM.add('stores.iron', 5);
+        }, 2000);
+      }
+    }
+
+    /* Event 2: 5 villagers, no watchtower → arm first night attack */
+    if (!$SM.get('game.whoa.firstNightAttackArmed') && !$SM.get('game.whoa.nightAttackEnabled')) {
+      var pop2 = $SM.get('game.population') || [];
+      if (pop2.length >= 5 && !$SM.get('game.buildings.watchtower')) {
+        $SM.set('game.whoa.firstNightAttackArmed', true, true);
+      }
+    }
+
+    /* Event 4: 7 villagers → unsettling stranger */
+    if (!$SM.get('game.whoa.unsettlingStranger')) {
+      var pop4 = $SM.get('game.population') || [];
+      var cap4 = Haven._getPopCap();
+      if (pop4.length >= 7 && pop4.length < cap4) {
+        $SM.set('game.whoa.unsettlingStranger', true, true);
+        Engine.setTimeout(function() {
+          Haven._addLog('a stranger arrives. different from the others.');
+          Haven._addLog('she doesn\u2019t sit by the fire. she stares at the mark.', 'timestamp');
+          Haven._addLog('\u2018you\u2019re the last one,\u2019 she says. \u2018the very last.\u2019', 'timestamp');
+          Haven._addLog('she won\u2019t say more. she works. but she watches.', 'timestamp');
+          var pop5 = $SM.get('game.population') || [];
+          var usedNames = pop5.map(function(v) { return v.name; });
+          var namePool  = Haven.VILLAGER_NAMES.filter(function(n) { return usedNames.indexOf(n) === -1; });
+          if (!namePool.length) namePool = Haven.VILLAGER_NAMES;
+          var name = namePool[Math.floor(Math.random() * namePool.length)];
+          var arrivalDay = $SM.get('game.day', true) || 0;
+          pop5.push({ name: name, assignment: 'idle', trait: 'spiritual', arrivalDay: arrivalDay, storyCount: 0 });
+          $SM.set('game.population', pop5, true);
+          var maxPop = $SM.get('playStats.maxPop') || 0;
+          if (pop5.length > maxPop) $SM.set('playStats.maxPop', pop5.length, true);
+          Haven._updatePopDisplay();
+          $SM.fireUpdate('game', true);
+        }, 3000);
+      }
     }
   },
 

@@ -94,7 +94,12 @@ var Wilds = {
     '4,2':   'den',     '8,4':   'den',     '1,8':   'den',
     '7,5':   'den',     '3,9':   'den',
     /* Sunken Sanctum (1) */
-    '11,11': 'sanctum'
+    '11,11': 'sanctum',
+    /* Final Overhaul §6: environmental hazard tiles */
+    '3,4':  'chasm',   '8,7':  'chasm',
+    '5,2':  'fog',     '6,8':  'fog',
+    '3,6':  'bridge',  '10,9': 'bridge',
+    '2,6':  'thorns',  '7,10': 'thorns'
   },
 
   /* Dead forest tiles (15) */
@@ -197,10 +202,7 @@ var Wilds = {
     Wilds._mapEl.className = 'mini-map';
     right.appendChild(Wilds._mapEl);
 
-    var legend = document.createElement('div');
-    legend.className = 'map-legend';
-    legend.innerHTML = '@ you &nbsp;&nbsp; H haven<br>r ruin &nbsp;&nbsp; c den<br>g grove &nbsp; s sanctum<br>$ cache &nbsp; f forest';
-    right.appendChild(legend);
+    /* Final Overhaul §4: legend removed — player learns by discovering */
 
     Engine.updateSlider();
     Dispatch('stateUpdate').subscribe(Wilds._onStateUpdate);
@@ -212,6 +214,13 @@ var Wilds = {
       $SM.set('game.companion.present', true,  true);
       $SM.set('game.companion.movesSinceComment', 0, true);
     }
+
+    /* Final Overhaul §7: capture haven state at departure for return summary */
+    $SM.set('game.wildsDeparture', {
+      fireLevel: $SM.get('game.fire.level', true) || 0,
+      popCount:  ($SM.get('game.population') || []).length,
+      food:      $SM.get('stores.food', true) || 0
+    }, true);
 
     if ($SM.get('game.player.x') === undefined) {
       $SM.set('game.player.x',       Wilds.START_X, true);
@@ -384,6 +393,17 @@ var Wilds = {
         Wilds._addLog(Wilds.SICK_FLAVOR[Math.floor(Math.random() * Wilds.SICK_FLAVOR.length)]);
         /* Section 2E: breadcrumb hint toward adjacent unexplored POI */
         Wilds._showBreadcrumb(x, y);
+        /* Final Overhaul §5: 30% micro-interaction on first visit */
+        if (!Wilds._isCleared(x, y)) {
+          var microMap = $SM.get('game.map.microEvent') || {};
+          var microK   = Wilds._key(x, y);
+          if (!microMap[microK] && Math.random() < 0.3) {
+            microMap[microK] = true;
+            $SM.set('game.map.microEvent', microMap, true);
+            Engine.setTimeout(function() { Wilds._showMicroInteraction(x, y); }, 400);
+            return;
+          }
+        }
         /* GDD §10: rare blighted fox on sick land */
         if (!Wilds._isCleared(x, y) && Math.random() < 0.08) {
           Engine.setTimeout(function() { Wilds._triggerCombat(x, y, 'fox', null); }, 600);
@@ -477,6 +497,47 @@ var Wilds = {
         }
         break;
 
+      /* Final Overhaul §6: environmental hazards */
+      case 'chasm':
+        if (Wilds._isCleared(x, y)) {
+          Wilds._addLog('the chasm. you crossed it before.');
+        } else {
+          Wilds._addLog('a crack in the earth. wide. deep. the sickness oozes from below.');
+          Wilds._showHazardChasm(x, y);
+          return;
+        }
+        break;
+
+      case 'fog':
+        if (Wilds._isCleared(x, y)) {
+          Wilds._addLog('the fog. you pushed through it before.');
+        } else {
+          Wilds._addLog('a low fog. thick. the mark dims in it.');
+          Wilds._showHazardFog(x, y);
+          return;
+        }
+        break;
+
+      case 'bridge':
+        if (Wilds._isCleared(x, y)) {
+          Wilds._addLog('the collapsed bridge. you crossed it before.');
+        } else {
+          Wilds._addLog('a river of black water. a bridge, half-collapsed.');
+          Wilds._showHazardBridge(x, y);
+          return;
+        }
+        break;
+
+      case 'thorns':
+        if (Wilds._isCleared(x, y)) {
+          Wilds._addLog('the thorn wall. a path through the ash.');
+        } else {
+          Wilds._addLog('twisted thorns. black. dense. they grew from the sickness.');
+          Wilds._showHazardThorns(x, y);
+          return;
+        }
+        break;
+
       case 'sanctum':
         Wilds._markReact('nearSanctum', 'the mark burns. it knows this place.');
         var found = ($SM.get('game.memories.found') || []).length;
@@ -505,6 +566,370 @@ var Wilds = {
         Wilds._addLog('the mark pulses. waiting.', 'timestamp');
       }
     }, 60000);
+  },
+
+  /* ----------------------------------------------------------------
+     Final Overhaul §5: Micro-interactions on sick tiles
+  ---------------------------------------------------------------- */
+
+  MICRO_EVENTS: [
+    {
+      key: 'cart',
+      desc: 'a collapsed cart. something underneath.',
+      actions: [
+        { label: 'search',   fn: '_microCart' },
+        { label: 'move on',  fn: null }
+      ]
+    },
+    {
+      key: 'well',
+      desc: 'an old well. the rope is frayed.',
+      actions: [
+        { label: 'lower a bucket', fn: '_microWell' },
+        { label: 'move on',        fn: null }
+      ]
+    },
+    {
+      key: 'cellar',
+      desc: 'a cellar door. sealed with rust.',
+      actions: [
+        { label: 'force it open', fn: '_microCellar' },
+        { label: 'leave it',      fn: null }
+      ]
+    },
+    {
+      key: 'grave',
+      desc: 'a grave marker. recent.',
+      actions: [
+        { label: 'pay respects', fn: '_microGrave' },
+        { label: 'move on',      fn: null }
+      ]
+    }
+  ],
+
+  CART_FRAGMENTS: [
+    'scratched into the cart: \u2018heading north. the mark-bearer will protect us.\u2019',
+    'a doll. small. left behind in haste.',
+    'a merchant\u2019s ledger. the last entry is a prayer.',
+    'dried flowers, pressed between stones. someone remembered beauty.',
+    'a map. crude. the ink has bled. but a circle \u2014 here. where you stand.'
+  ],
+
+  _showMicroInteraction: function(x, y) {
+    var ev = Wilds.MICRO_EVENTS[Math.floor(Math.random() * Wilds.MICRO_EVENTS.length)];
+    Wilds._addLog(ev.desc, 'timestamp');
+    Wilds._actionsEl.innerHTML = '';
+    ev.actions.forEach(function(act) {
+      var btn = document.createElement('button');
+      btn.className   = 'action-btn visible';
+      btn.textContent = act.label;
+      btn.addEventListener('click', function() {
+        Wilds._actionsEl.innerHTML = '';
+        if (act.fn) {
+          Wilds[act.fn](x, y);
+        } else {
+          Wilds._buildActions();
+        }
+      });
+      Wilds._actionsEl.appendChild(btn);
+    });
+  },
+
+  _microCart: function(x, y) {
+    var roll = Math.random();
+    if (roll < 0.6) {
+      var resources = ['wood', 'stone', 'herbs', 'cloth'];
+      var r = resources[Math.floor(Math.random() * resources.length)];
+      var amt = 2 + Math.floor(Math.random() * 3); /* 2-4 */
+      var space = Wilds._getMaxCarry() - Wilds._getCarryTotal();
+      amt = Math.min(amt, space);
+      if (amt > 0) {
+        var carry = $SM.get('game.carry') || {};
+        carry[r] = (carry[r] || 0) + amt;
+        $SM.set('game.carry', carry, true);
+        Wilds._addLog(amt + ' ' + r + ' found in the rubble.', 'timestamp');
+        Wilds._renderCarry();
+      }
+    } else if (roll < 0.9) {
+      Wilds._addLog('rubble. nothing useful.', 'timestamp');
+    } else {
+      var frag = Wilds.CART_FRAGMENTS[Math.floor(Math.random() * Wilds.CART_FRAGMENTS.length)];
+      Wilds._addLog(frag, 'memory');
+    }
+    Wilds._buildActions();
+  },
+
+  _microWell: function(x, y) {
+    var roll = Math.random();
+    if (roll < 0.5) {
+      var amt = 3 + Math.floor(Math.random() * 3); /* 3-5 herbs */
+      var space = Wilds._getMaxCarry() - Wilds._getCarryTotal();
+      amt = Math.min(amt, space);
+      if (amt > 0) {
+        var carry = $SM.get('game.carry') || {};
+        carry.herbs = (carry.herbs || 0) + amt;
+        $SM.set('game.carry', carry, true);
+        Wilds._addLog(amt + ' herbs found. the water nourishes.', 'timestamp');
+        Wilds._renderCarry();
+      }
+    } else if (roll < 0.8) {
+      Wilds._addLog('the rope gives way. the bucket is gone.', 'timestamp');
+    } else {
+      var space2 = Wilds._getMaxCarry() - Wilds._getCarryTotal();
+      if (space2 > 0) {
+        var carry2 = $SM.get('game.carry') || {};
+        carry2.cloth = (carry2.cloth || 0) + 1;
+        $SM.set('game.carry', carry2, true);
+        Wilds._addLog('1 cloth. a rag caught on the stones. still usable.', 'timestamp');
+        Wilds._renderCarry();
+      }
+    }
+    Wilds._buildActions();
+  },
+
+  _microCellar: function(x, y) {
+    var roll = Math.random();
+    if (roll < 0.4) {
+      var amt = 5 + Math.floor(Math.random() * 4); /* 5-8 food */
+      $SM.add('stores.food', amt);
+      Wilds._addLog(amt + ' food. preserved stores.', 'timestamp');
+    } else if (roll < 0.8) {
+      var amt2 = 2 + Math.floor(Math.random() * 3); /* 2-4 iron */
+      var space = Wilds._getMaxCarry() - Wilds._getCarryTotal();
+      amt2 = Math.min(amt2, space);
+      if (amt2 > 0) {
+        var carry = $SM.get('game.carry') || {};
+        carry.iron = (carry.iron || 0) + amt2;
+        $SM.set('game.carry', carry, true);
+        Wilds._addLog(amt2 + ' iron. old tools.', 'timestamp');
+        Wilds._renderCarry();
+      }
+    } else {
+      /* Ambush: blighted fox, no flee */
+      Engine.setTimeout(function() { Wilds._triggerCombat(x, y, 'fox', 'ambush'); }, 400);
+      return;
+    }
+    Wilds._buildActions();
+  },
+
+  _microGrave: function(x, y) {
+    Wilds._addLog('you kneel. the mark flickers. recognition.', 'timestamp');
+    Wilds._addLog('this one carried the mark too. a long time ago.', 'timestamp');
+    $SM.set('playStats.graveRespects', ($SM.get('playStats.graveRespects') || 0) + 1, true);
+    Wilds._buildActions();
+  },
+
+  /* ----------------------------------------------------------------
+     Final Overhaul §6: Environmental hazard handlers
+  ---------------------------------------------------------------- */
+
+  _showHazardChasm: function(x, y) {
+    Wilds._actionsEl.innerHTML = '';
+    var food = $SM.get('stores.food', true);
+
+    function makeBtn(label, fn) {
+      var btn = document.createElement('button');
+      btn.className   = 'action-btn visible';
+      btn.textContent = label;
+      btn.addEventListener('click', function() {
+        Wilds._actionsEl.innerHTML = '';
+        fn();
+      });
+      Wilds._actionsEl.appendChild(btn);
+    }
+
+    makeBtn('cross on the fallen tree', function() {
+      /* Safe, costs 2 extra food */
+      if (food >= 2) {
+        $SM.add('stores.food', -2, true);
+      }
+      Wilds._setCleared(x, y);
+      Wilds._addLog('you edge across the tree. slow. careful.', 'timestamp');
+      Wilds._buildActions();
+    });
+
+    makeBtn('jump', function() {
+      if (Math.random() < 0.7) {
+        Wilds._setCleared(x, y);
+        Wilds._addLog('you clear it. the mark flares.', 'timestamp');
+      } else {
+        $SM.set('game.player.health', Math.max(1, ($SM.get('game.player.health', true) || 100) - 20), true);
+        Wilds._setCleared(x, y);
+        Wilds._addLog('you slip. the mark catches you. you land hard. \u221220 health.', 'timestamp');
+      }
+      Wilds._buildActions();
+    });
+
+    makeBtn('go around', function() {
+      if (food >= 2) {
+        $SM.add('stores.food', -2, true);
+      }
+      Wilds._setCleared(x, y);
+      Wilds._addLog('a long way around. but you make it.', 'timestamp');
+      Wilds._buildActions();
+    });
+  },
+
+  _showHazardFog: function(x, y) {
+    Wilds._actionsEl.innerHTML = '';
+    var torches    = $SM.get('game.inventory.torchCharges', true) || 0;
+    var hasLantern = !!$SM.get('game.inventory.markLantern');
+    var food       = $SM.get('stores.food', true);
+
+    function makeBtn(label, disabled, fn) {
+      var btn = document.createElement('button');
+      btn.className   = 'action-btn visible';
+      btn.textContent = label;
+      btn.disabled    = !!disabled;
+      btn.addEventListener('click', function() {
+        if (btn.disabled) return;
+        Wilds._actionsEl.innerHTML = '';
+        fn();
+      });
+      Wilds._actionsEl.appendChild(btn);
+    }
+
+    makeBtn(
+      hasLantern ? 'push through' : 'push through (3 torch charges)',
+      !hasLantern && torches < 3,
+      function() {
+        if (!hasLantern) $SM.add('game.inventory.torchCharges', -3, true);
+        Wilds._setCleared(x, y);
+        Wilds._addLog('you push through the fog. disoriented but unharmed.', 'timestamp');
+        Wilds._buildActions();
+      }
+    );
+
+    makeBtn('wait for it to pass', false, function() {
+      if (food >= 1) $SM.add('stores.food', -1, true);
+      Wilds._setCleared(x, y);
+      Wilds._addLog('you wait. the fog lifts. the path is clear.', 'timestamp');
+      Wilds._buildActions();
+    });
+
+    makeBtn('find another way', false, function() {
+      if (food >= 2) $SM.add('stores.food', -2, true);
+      Wilds._setCleared(x, y);
+      Wilds._addLog('a longer route. you avoid the fog.', 'timestamp');
+      Wilds._buildActions();
+    });
+  },
+
+  _showHazardBridge: function(x, y) {
+    Wilds._actionsEl.innerHTML = '';
+    var health = $SM.get('game.player.health', true) || 100;
+    var food   = $SM.get('stores.food', true);
+
+    function makeBtn(label, fn) {
+      var btn = document.createElement('button');
+      btn.className   = 'action-btn visible';
+      btn.textContent = label;
+      btn.addEventListener('click', function() {
+        Wilds._actionsEl.innerHTML = '';
+        fn();
+      });
+      Wilds._actionsEl.appendChild(btn);
+    }
+
+    makeBtn('climb across the ruins', function() {
+      if (Math.random() < 0.8) {
+        Wilds._setCleared(x, y);
+        /* 50% chance 2 iron from bridge bolts */
+        if (Math.random() < 0.5) {
+          var space = Wilds._getMaxCarry() - Wilds._getCarryTotal();
+          var amt   = Math.min(2, space);
+          if (amt > 0) {
+            var carry = $SM.get('game.carry') || {};
+            carry.iron = (carry.iron || 0) + amt;
+            $SM.set('game.carry', carry, true);
+            Wilds._addLog('the bridge holds. ' + amt + ' iron bolts salvaged.', 'timestamp');
+            Wilds._renderCarry();
+          } else {
+            Wilds._addLog('the bridge holds.', 'timestamp');
+          }
+        } else {
+          Wilds._addLog('the bridge holds.', 'timestamp');
+        }
+      } else {
+        /* Fail: -10 health, lose 3 random resources */
+        $SM.set('game.player.health', Math.max(1, health - 10), true);
+        Wilds._setCleared(x, y);
+        var carry2 = $SM.get('game.carry') || {};
+        var lost = 0;
+        var rKeys = Object.keys(carry2).filter(function(r) { return carry2[r] > 0; });
+        for (var i = 0; i < 3 && rKeys.length > 0; i++) {
+          var idx2 = Math.floor(Math.random() * rKeys.length);
+          carry2[rKeys[idx2]] = Math.max(0, carry2[rKeys[idx2]] - 1);
+          if (carry2[rKeys[idx2]] === 0) rKeys.splice(idx2, 1);
+          lost++;
+        }
+        $SM.set('game.carry', carry2, true);
+        Wilds._addLog('a plank gives. you fall. \u221210 health.', 'timestamp');
+        if (lost > 0) Wilds._addLog(lost + ' resource' + (lost > 1 ? 's' : '') + ' lost in the water.', 'timestamp');
+        Wilds._renderCarry();
+      }
+      Wilds._buildActions();
+    });
+
+    makeBtn('wade through', function() {
+      $SM.set('game.player.health', Math.max(1, health - 5), true);
+      Wilds._setCleared(x, y);
+      Wilds._addLog('the black water burns. but you cross. \u22125 health.', 'timestamp');
+      Wilds._buildActions();
+    });
+
+    makeBtn('search for a crossing', function() {
+      if (food >= 2) $SM.add('stores.food', -2, true);
+      Wilds._setCleared(x, y);
+      Wilds._addLog('you find a shallow point upstream. you cross safely.', 'timestamp');
+      Wilds._buildActions();
+    });
+  },
+
+  _showHazardThorns: function(x, y) {
+    Wilds._actionsEl.innerHTML = '';
+    var hasSword   = !!$SM.get('game.inventory.steelSword') || !!$SM.get('game.inventory.crudeSword');
+    var torches    = $SM.get('game.inventory.torchCharges', true) || 0;
+    var hasLantern = !!$SM.get('game.inventory.markLantern');
+    var food       = $SM.get('stores.food', true);
+
+    function makeBtn(label, disabled, fn) {
+      var btn = document.createElement('button');
+      btn.className   = 'action-btn visible';
+      btn.textContent = label;
+      btn.disabled    = !!disabled;
+      btn.addEventListener('click', function() {
+        if (btn.disabled) return;
+        Wilds._actionsEl.innerHTML = '';
+        fn();
+      });
+      Wilds._actionsEl.appendChild(btn);
+    }
+
+    makeBtn('cut through', !hasSword, function() {
+      if (food >= 1) $SM.add('stores.food', -1, true);
+      Wilds._setCleared(x, y);
+      Wilds._addLog('you hack through the thorns. the mark steadies you.', 'timestamp');
+      Wilds._buildActions();
+    });
+
+    makeBtn(
+      hasLantern ? 'burn through' : 'burn through (3 torch charges)',
+      !hasLantern && torches < 3,
+      function() {
+        if (!hasLantern) $SM.add('game.inventory.torchCharges', -3, true);
+        Wilds._setCleared(x, y);
+        Wilds._addLog('the thorns burn. the mark flares as they die.', 'timestamp');
+        Wilds._buildActions();
+      }
+    );
+
+    makeBtn('go around', false, function() {
+      if (food >= 2) $SM.add('stores.food', -2, true);
+      Wilds._setCleared(x, y);
+      Wilds._addLog('a long detour. but you pass.', 'timestamp');
+      Wilds._buildActions();
+    });
   },
 
   /* ----------------------------------------------------------------
@@ -815,7 +1240,38 @@ var Wilds = {
     /* Section 10: villager react to player returning */
     if (typeof Haven !== 'undefined') Engine.setTimeout(function() { Haven._villagerReact('return'); }, 800);
 
+    /* Final Overhaul §7: return summary */
+    var dep      = $SM.get('game.wildsDeparture') || {};
+    var curFire  = $SM.get('game.fire.level', true) || 0;
+    var curPop   = ($SM.get('game.population') || []).length;
+    var depFire  = dep.fireLevel !== undefined ? dep.fireLevel : curFire;
+    var depPop   = dep.popCount  !== undefined ? dep.popCount  : curPop;
+    var changes  = [];
+    if (curFire < depFire) changes.push('the fire burned low.');
+    if (curPop < depPop) {
+      var gone = depPop - curPop;
+      changes.push(gone === 1 ? 'someone left.' : gone + ' people left.');
+    }
+
     Engine.travelTo(Haven);
+
+    /* Show summary after a short delay (Haven.onArrival runs synchronously above) */
+    if (typeof Haven !== 'undefined') {
+      Engine.setTimeout(function() {
+        Haven._addLog('you return to the haven.');
+        if (changes.length > 0) {
+          changes.forEach(function(msg, i) {
+            Engine.setTimeout(function() { Haven._addLog(msg, 'timestamp'); }, (i + 1) * 700);
+          });
+        } else {
+          Engine.setTimeout(function() {
+            Haven._addLog('the fire burns. the people are fed. all is well.', 'timestamp');
+          }, 700);
+        }
+      }, 300);
+    }
+
+    $SM.set('game.wildsDeparture', null, true);
   },
 
   /* ----------------------------------------------------------------
@@ -1057,7 +1513,15 @@ var Wilds = {
           cell.textContent = CHARS[t]  || '\u00b7';
           cell.style.color = COLORS[t] || 'var(--border)';
         } else {
-          cell.textContent = ' '; /* unexplored: blank */
+          /* Final Overhaul §4: adjacent non-sick unvisited tiles show as '?' */
+          var adjToPlayer = (Math.abs(wx - px) + Math.abs(wy - py) === 1);
+          var adjTile     = Wilds._getTile(wx, wy);
+          if (adjToPlayer && adjTile !== 'sick') {
+            cell.textContent = '?';
+            cell.style.color = 'var(--mark-amber)';
+          } else {
+            cell.textContent = ' ';
+          }
         }
         Wilds._mapEl.appendChild(cell);
       }

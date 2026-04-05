@@ -12,6 +12,24 @@ var Combat = {
   _enemy:     null,
   _afterType: null,
 
+  /* Final Overhaul §10 — randomized combat text */
+  OPENING_LINES: {
+    fox:      ['a fox. twisted. it snarls at the light.', 'red eyes in the brush. small. fast.', 'the mark flickers. something is close. a fox, corrupted.'],
+    crawler:  ['the ground shifts. roots rise. reaching.', 'twisted wood and sick soil, moving with purpose.', 'it was a tree once. now it hungers.'],
+    shade:    ['the air thickens. a shape in the murk.', 'darkness condenses. takes form. watches.', 'a shade. the sickness given shape. it keens.'],
+    guardian: ['stone grinds. the guardian wakes.', 'ancient eyes open in the rock. still guarding. still bound.', 'the sentinel stirs. it does not recognize you.']
+  },
+  VICTORY_LINES: [
+    'it falls. the mark dims. quiet returns.',
+    'done. the corruption bleeds into the soil and vanishes.',
+    'the creature crumbles. the land sighs.'
+  ],
+  DEFEAT_LINES: [
+    'darkness. then the haven. you\u2019re alive. barely.',
+    'you wake by the fire. wounded. everything you carried is gone.',
+    'the mark flares. drags you home. you don\u2019t remember how.'
+  ],
+
   /* GDD §10 — player attack = base 0 + weapon bonus */
   _getPlayerAttack: function() {
     var base = 0;
@@ -34,9 +52,10 @@ var Combat = {
     Combat._afterType = afterType;
     Combat._enemy     = JSON.parse(JSON.stringify(enemy)); /* deep copy */
 
-    $SM.set('game.combat.active',    true,     true);
-    $SM.set('game.combat.enemyHp',   enemy.hp, true);
+    $SM.set('game.combat.active',      true,     true);
+    $SM.set('game.combat.enemyHp',     enemy.hp, true);
     $SM.set('game.combat.lastEnemyHp', enemy.hp, true);
+    $SM.set('game.combat.openingShown', false,   true);
 
     Combat._render();
 
@@ -57,7 +76,14 @@ var Combat = {
     var playerHp = $SM.get('game.player.health',   true);
     var enemyHp  = $SM.get('game.combat.enemyHp',  true);
 
-    Wilds._addLog(e.name + '.');
+    /* Final Overhaul §10: randomized opening line (first render only) */
+    var opening = Combat.OPENING_LINES[e.key];
+    if (opening && !$SM.get('game.combat.openingShown')) {
+      $SM.set('game.combat.openingShown', true, true);
+      Wilds._addLog(opening[Math.floor(Math.random() * opening.length)]);
+    } else {
+      Wilds._addLog(e.name + '.');
+    }
     Wilds._addLog('your health: ' + playerHp + ' / 100',      'timestamp');
     Wilds._addLog('enemy health: ' + enemyHp + ' / ' + Combat._enemy.hp, 'timestamp');
 
@@ -75,8 +101,8 @@ var Combat = {
     fightBtn.addEventListener('click', function() { Combat._doRound(); });
     Wilds._actionsEl.appendChild(fightBtn);
 
-    /* [flee] — not available in sanctum */
-    if (Combat._afterType !== 'sanctum') {
+    /* [flee] — not available in sanctum or ambush */
+    if (Combat._afterType !== 'sanctum' && Combat._afterType !== 'ambush') {
       var fleeBtn = document.createElement('button');
       fleeBtn.className   = 'action-btn visible';
       fleeBtn.textContent = 'flee';
@@ -147,7 +173,8 @@ var Combat = {
     $SM.remove('game.combat.enemyHp',     true);
     $SM.set('playStats.combatWins', ($SM.get('playStats.combatWins') || 0) + 1, true);
 
-    Wilds._addLog('the ' + e.name + ' falls.');
+    var vLine = Combat.VICTORY_LINES[Math.floor(Math.random() * Combat.VICTORY_LINES.length)];
+    Wilds._addLog(vLine);
 
     /* Section 3: combat won mark reaction */
     Wilds._markReact('combatWon', 'the mark settles. watchful.');
@@ -189,7 +216,8 @@ var Combat = {
     $SM.set('game.carry',          {},    true); /* GDD §10: lose all carried resources */
     $SM.set('playStats.combatLosses', ($SM.get('playStats.combatLosses') || 0) + 1, true);
 
-    Wilds._addLog('you fall. the mark holds \u2014 barely.');
+    var dLine = Combat.DEFEAT_LINES[Math.floor(Math.random() * Combat.DEFEAT_LINES.length)];
+    Wilds._addLog(dLine);
 
     /* Section 12: companion may die on player loss */
     var companion = $SM.get('game.companion');

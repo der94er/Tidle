@@ -75,6 +75,22 @@ var Events = {
       Events._whisperCheck(day);
     }
 
+    /* Final Overhaul §3 Event 5: 10 memories — the dream */
+    if (!$SM.get('game.whoa.theDream')) {
+      var memCount = ($SM.get('game.memories.found') || []).length;
+      if (memCount >= 10) {
+        $SM.set('game.whoa.theDream', true, true);
+        Engine.setTimeout(function() {
+          if (typeof Haven !== 'undefined' && Haven._logEl) {
+            Haven._addLog('you wake gasping. the mark burns.');
+            Haven._addLog('a flash \u2014 a face. a room. a decision.', 'timestamp');
+            Haven._addLog('the dream fades. but the feeling doesn\u2019t.', 'timestamp');
+            Haven._addLog('something is pulling you. deeper into the wilds.', 'timestamp');
+          }
+        }, 2000);
+      }
+    }
+
     /* Re-inject trader button if Haven is active but button was cleared */
     if ($SM.get('game.trader.active') &&
         Engine.activeModule === Haven &&
@@ -88,6 +104,15 @@ var Events = {
   ---------------------------------------------------------------- */
 
   _nightCreatureRoll: function() {
+    /* Final Overhaul §3 Event 2: night attacks disabled until first night attack fires */
+    if (!$SM.get('game.whoa.nightAttackEnabled')) {
+      if ($SM.get('game.whoa.firstNightAttackArmed')) {
+        $SM.set('game.whoa.nightAttackEnabled', true, true);
+        Events._firstNightAttack();
+      }
+      return;
+    }
+
     var pop = $SM.get('game.population') || [];
     if (pop.length === 0) return;
 
@@ -147,6 +172,19 @@ var Events = {
         $SM.fireUpdate('game', true);
       }
     }
+  },
+
+  /* Final Overhaul §3 Event 2: scripted first night attack */
+  _firstNightAttack: function() {
+    if (typeof Haven === 'undefined' || !Haven._logEl) return;
+    Haven._addLog('screaming. darkness at the edge of the green.');
+    Haven._addLog('something came in the night. the stores are torn open.', 'timestamp');
+    var fLoss = 5 + Math.floor(Math.random() * 6); /* 5-10 food */
+    var food  = $SM.get('stores.food', true);
+    var fTake = Math.min(fLoss, food);
+    if (fTake > 0) $SM.add('stores.food', -fTake, true);
+    Haven._addLog('the sickness has teeth.', 'timestamp');
+    $SM.fireUpdate('stores', true);
   },
 
   /* ----------------------------------------------------------------

@@ -7,7 +7,8 @@
 
 var Leaderboard = {
 
-  SAVE_KEY: 'lastEmber_scores',
+  SAVE_KEY:       'lastEmber_scores',
+  PERSISTENT_KEY: 'lastEmber_persistent',
 
   /* GDD §13 score formula */
   _calculateScore: function() {
@@ -21,6 +22,7 @@ var Leaderboard = {
     var retreats      = $SM.get('playStats.combatRetreats')  || 0;
     var extraFrags    = $SM.get('stores.markFragments')      || 0;
     var creaturesHealed = $SM.get('playStats.creaturesHealed') || 0;
+    var graveRespects   = $SM.get('playStats.graveRespects')   || 0;
     var companion       = $SM.get('game.companion');
     var companionBonus  = 0;
     if (companion && companion.name) {
@@ -32,18 +34,19 @@ var Leaderboard = {
     ['hearth','forge','hut','lodge','storehouse','workshop','watchtower','herbalistHut','tradingPost']
       .forEach(function(k) { if ($SM.get('game.buildings.' + k)) buildings++; });
 
-    return (memories      * 100)
-         + (buildings     *  50)
-         + (maxPop        *  25)
-         + (combatWins    *  15)
-         + (tilesExplored *   2)
-         + (days          *   3)
-         + (extraFrags    *  50)
-         + (sealEnding    * 500)
-         + (creaturesHealed * 20)
+    return (memories        * 100)
+         + (buildings       *  50)
+         + (maxPop          *  25)
+         + (combatWins      *  15)
+         + (tilesExplored   *   2)
+         + (days            *   3)
+         + (extraFrags      *  50)
+         + (sealEnding      * 500)
+         + (creaturesHealed *  20)
+         + (graveRespects   *   5)
          + companionBonus
-         - (villagersLost * 100)
-         - (retreats      *  25);
+         - (villagersLost   * 100)
+         - (retreats        *  25);
   },
 
   /* Save the completed run and update personal bests */
@@ -86,7 +89,68 @@ var Leaderboard = {
     }
 
     Leaderboard._save(data);
+
+    /* Final Overhaul §9: update persistent cross-playthrough tracker */
+    Leaderboard._updatePersistent(run);
+
     return run;
+  },
+
+  /* Final Overhaul §9: persistent tracker (survives across playthroughs) */
+  _updatePersistent: function(run) {
+    var p = Leaderboard._loadPersistent();
+    p.totalMemories = Math.max(p.totalMemories || 0, run.memories);
+    p.completedRuns = (p.completedRuns || 0) + 1;
+    p.endingsSeen   = p.endingsSeen || [];
+    if (run.ending && p.endingsSeen.indexOf(run.ending) === -1) {
+      p.endingsSeen.push(run.ending);
+    }
+    Leaderboard._savePersistent(p);
+  },
+
+  _loadPersistent: function() {
+    try {
+      var raw = localStorage.getItem(Leaderboard.PERSISTENT_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return { totalMemories: 0, completedRuns: 0, endingsSeen: [] };
+  },
+
+  _savePersistent: function(data) {
+    try { localStorage.setItem(Leaderboard.PERSISTENT_KEY, JSON.stringify(data)); } catch(e) {}
+  },
+
+  /* Show persistent tracker on loading screen */
+  showPersistent: function(container) {
+    var p = Leaderboard._loadPersistent();
+    if (!p || p.completedRuns === 0) return;
+
+    var el = document.createElement('div');
+    el.className = 'persistent-tracker';
+
+    var lines = [];
+    lines.push('memories recovered: ' + (p.totalMemories || 0) + '/25 across all journeys.');
+    lines.push('journeys completed: ' + (p.completedRuns || 0));
+
+    var endings = p.endingsSeen || [];
+    if (endings.length > 0) {
+      lines.push('endings witnessed: ' + endings.join(', '));
+    }
+    if (endings.indexOf('seal') !== -1 && endings.indexOf('break') !== -1) {
+      lines.push('both paths walked. the full truth is known.');
+    }
+    if ((p.totalMemories || 0) >= 25) {
+      lines.push('every memory recovered. nothing is forgotten.');
+    }
+
+    lines.forEach(function(text) {
+      var d = document.createElement('div');
+      d.className   = 'narrative timestamp visible';
+      d.textContent = text;
+      el.appendChild(d);
+    });
+
+    container.appendChild(el);
   },
 
   /* Replaces _showScore stub in wilds.js — called after ending texts finish */
@@ -125,8 +189,10 @@ var Leaderboard = {
     Leaderboard._stat('days survived',      days,            3,   false);
     if (extraFrags > 0)    Leaderboard._stat('extra fragments', extraFrags, 50, false);
     var creaturesHealed = $SM.get('playStats.creaturesHealed') || 0;
+    var graveRespects2  = $SM.get('playStats.graveRespects')   || 0;
     var companion       = $SM.get('game.companion');
     if (creaturesHealed > 0) Leaderboard._stat('creatures healed', creaturesHealed, 20, false);
+    if (graveRespects2  > 0) Leaderboard._stat('grave respects',   graveRespects2,   5, false);
     if (companion && companion.name) {
       if (companion.alive) {
         Leaderboard._line('companion survived: +100', 'score-stat');
@@ -148,10 +214,25 @@ var Leaderboard = {
       if (data.bests.survival)  Leaderboard._line('longest survival: ' + data.bests.survival.days + ' days',                'score-stat');
     }
 
+    /* ── Persistent tracker ── */
+    var p = Leaderboard._loadPersistent();
+    if (p && p.completedRuns > 1) {
+      Leaderboard._line('');
+      Leaderboard._line('across all journeys', 'section-header');
+      Leaderboard._line('memories recovered: ' + (p.totalMemories || 0) + '/25', 'score-stat');
+      Leaderboard._line('journeys completed: ' + p.completedRuns, 'score-stat');
+      if ((p.endingsSeen || []).indexOf('seal') !== -1 && p.endingsSeen.indexOf('break') !== -1) {
+        Leaderboard._line('both paths walked. the full truth is known.', 'score-stat');
+      }
+    }
+
     /* ── Play again ── */
     var btn = document.createElement('button');
     btn.className   = 'action-btn visible';
-    btn.textContent = 'play again';
+    var pRuns = Leaderboard._loadPersistent().completedRuns || 0;
+    btn.textContent = pRuns > 0
+      ? 'begin another journey. you will forget again. but the land remembers.'
+      : 'play again';
     btn.addEventListener('click', function() { Engine.confirmRestart(); });
     Wilds._actionsEl.appendChild(btn);
   },
