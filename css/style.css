@@ -816,3 +816,27 @@ body.night {
     max-height: 320px;
   }
 }
+
+/* ============================================================
+   Comprehensive Update v1.2
+   ============================================================ */
+
+/* Section 2F: haven status bar in wilds */
+.haven-status-bar {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 0 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+/* Section 5: haven evolution text */
+.haven-evol {
+  font-family: var(--font-narrative);
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 0 0 12px;
+  line-height: 1.6;
+}

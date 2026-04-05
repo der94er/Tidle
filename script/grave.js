@@ -183,6 +183,26 @@ var Grave = {
     txt.className   = 'narrative visible';
     txt.textContent = 'you climbed out of the grave. you are not going back.';
     Grave._logEl.appendChild(txt);
+
+    /* Section 6: memory count conditionals */
+    var memFound = ($SM.get('game.memories.found') || []).length;
+    if (memFound >= 25) {
+      var playerName = $SM.get('game.playerName') || 'the mark-bearer';
+      var nameEl = document.createElement('div');
+      nameEl.className   = 'narrative visible';
+      nameEl.textContent = playerName + '. your name is ' + playerName + '.';
+      Grave._logEl.appendChild(nameEl);
+    } else if (memFound >= 20) {
+      var almostEl = document.createElement('div');
+      almostEl.className   = 'narrative timestamp visible';
+      almostEl.textContent = 'you almost remember your name.';
+      Grave._logEl.appendChild(almostEl);
+    } else if (memFound >= 10) {
+      var moreEl = document.createElement('div');
+      moreEl.className   = 'narrative timestamp visible';
+      moreEl.textContent = 'you remember more now. but not everything. not yet.';
+      Grave._logEl.appendChild(moreEl);
+    }
   },
 
   /* Phase 1 complete — hand off to haven.js */

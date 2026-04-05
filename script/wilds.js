@@ -12,17 +12,19 @@ var Wilds = {
   tab:   null,
   panel: null,
 
-  _descEl:    null,
-  _logEl:     null,
-  _actionsEl: null,
-  _mapEl:     null,
-  _carryEl:   null,
+  _descEl:       null,
+  _logEl:        null,
+  _actionsEl:    null,
+  _mapEl:        null,
+  _carryEl:      null,
+  _havenStatusEl: null,
+  _idleTimer:    null,
 
   /* GDD §9 */
-  MAP_W:     20,
-  MAP_H:     20,
-  START_X:   10,
-  START_Y:   10,
+  MAP_W:     12,
+  MAP_H:     12,
+  START_X:   6,
+  START_Y:   6,
   MAX_CARRY: 20,
 
   /* GDD §9 — sick land flavor pool (exact text from DESIGN.md §9) */
@@ -76,38 +78,35 @@ var Wilds = {
   ],
 
   /* GDD §9 — pre-designed map (sparse; rest is sick land)
-     Haven at (10,10). Sanctum at (19,19). */
+     Haven at (6,6). Sanctum at (11,11). */
   MAP_LAYOUT: {
-    '10,10': 'haven',
+    '6,6':   'haven',
     /* Sacred groves (3) */
-    '3,3':   'grove',  '16,4':  'grove',  '8,17':  'grove',
+    '1,1':   'grove',   '10,2':  'grove',   '2,10':  'grove',
     /* Warden camps (5) */
-    '2,2':   'warden', '17,3':  'warden', '5,15':  'warden',
-    '14,16': 'warden', '10,6':  'warden',
+    '3,0':   'warden',  '9,1':   'warden',  '0,7':   'warden',
+    '8,9':   'warden',  '4,11':  'warden',
     /* Ruins (10) */
-    '5,2':   'ruin',   '12,1':  'ruin',   '4,7':   'ruin',
-    '7,12':  'ruin',   '15,8':  'ruin',   '3,18':  'ruin',
-    '13,14': 'ruin',   '18,10': 'ruin',   '9,4':   'ruin',
-    '16,19': 'ruin',
+    '5,0':   'ruin',    '11,0':  'ruin',    '0,3':   'ruin',
+    '7,2':   'ruin',    '2,4':   'ruin',    '10,4':  'ruin',
+    '4,6':   'ruin',    '0,10':  'ruin',    '8,10':  'ruin',    '9,8':   'ruin',
     /* Creature dens (5) */
-    '6,6':   'den',    '14,5':  'den',    '2,14':  'den',
-    '18,15': 'den',    '11,18': 'den',
+    '4,2':   'den',     '8,4':   'den',     '1,8':   'den',
+    '7,5':   'den',     '3,9':   'den',
     /* Sunken Sanctum (1) */
-    '19,19': 'sanctum'
+    '11,11': 'sanctum'
   },
 
-  /* Dead forest tiles (30) */
+  /* Dead forest tiles (15) */
   MAP_FOREST: [
-    '1,0','4,0','8,0','15,0','18,0','0,3','11,3','0,7','19,5',
-    '7,8','13,6','1,10','19,10','6,11','16,11','0,13','18,13',
-    '4,14','12,15','7,16','1,17','15,17','19,17','0,18','6,18',
-    '13,18','4,19','9,19','14,19','17,19'
+    '0,0','2,0','8,0','11,1','1,3','6,2','11,4','5,7',
+    '0,6','11,7','0,11','6,10','5,11','10,11','11,9'
   ],
 
   /* Resource cache tiles (15) */
   MAP_CACHE: [
-    '7,1','16,2','1,5','12,6','17,8','3,9','8,9','15,10',
-    '1,11','13,11','6,13','18,12','4,16','9,16','16,17'
+    '2,1','6,1','9,3','1,5','5,4','3,7','9,5','10,6',
+    '2,9','7,8','5,9','1,11','7,11','10,10','4,4'
   ],
 
   /* GDD §11 — MEMORIES index given at each visit-order of each tile type */
@@ -164,6 +163,10 @@ var Wilds = {
     main.className = 'wilds-main';
     layout.appendChild(main);
 
+    Wilds._havenStatusEl = document.createElement('div');
+    Wilds._havenStatusEl.className = 'haven-status-bar';
+    main.appendChild(Wilds._havenStatusEl);
+
     Wilds._descEl = document.createElement('div');
     Wilds._descEl.className = 'tile-coord';
     main.appendChild(Wilds._descEl);
@@ -204,6 +207,12 @@ var Wilds = {
   },
 
   onArrival: function(diff) {
+    /* Section 12: companion travels with player into wilds */
+    if ($SM.get('game.companion.alive') && !$SM.get('game.companion.present')) {
+      $SM.set('game.companion.present', true,  true);
+      $SM.set('game.companion.movesSinceComment', 0, true);
+    }
+
     if ($SM.get('game.player.x') === undefined) {
       $SM.set('game.player.x',       Wilds.START_X, true);
       $SM.set('game.player.y',       Wilds.START_Y, true);
@@ -217,6 +226,10 @@ var Wilds = {
     Wilds._showCurrentTile();
     Wilds._buildActions();
     Wilds._renderCarry();
+    Wilds._updateHavenStatus();
+
+    /* Section 3: first wilds entry */
+    Wilds._markReact('firstEntry', 'the mark dims slightly. it doesn\u2019t like being far from the fire.');
   },
 
   /* Called by engine.js and haven.js when watchtower is built */
@@ -278,6 +291,7 @@ var Wilds = {
   ---------------------------------------------------------------- */
 
   _move: function(dx, dy) {
+    if (Wilds._idleTimer) { clearTimeout(Wilds._idleTimer); Wilds._idleTimer = null; }
     if ($SM.get('game.combat.active')) return;
 
     var x  = $SM.get('game.player.x', true);
@@ -309,17 +323,12 @@ var Wilds = {
     var explored   = Wilds._isExplored(nx, ny);
     var hasLantern = !!$SM.get('game.inventory.markLantern');
     if (!explored && !hasLantern) {
-      var t  = $SM.get('game.inventory.torches',           true) || 0;
-      var rt = $SM.get('game.inventory.reinforcedTorches', true) || 0;
-      if (t < 1 && rt < 1) {
+      var charges = $SM.get('game.inventory.torchCharges', true) || 0;
+      if (charges < 1) {
         Wilds._addLog('no torch. cannot enter unexplored territory.');
         return;
       }
-      if (t > 0) {
-        $SM.add('game.inventory.torches', -1, true);
-      } else {
-        $SM.add('game.inventory.reinforcedTorches', -1, true);
-      }
+      $SM.add('game.inventory.torchCharges', -1, true);
     }
 
     $SM.add('stores.food', -1, true);
@@ -327,6 +336,25 @@ var Wilds = {
     $SM.set('game.player.y', ny, true);
     Wilds._setExplored(nx, ny);
     $SM.set('playStats.tilesExplored', ($SM.get('playStats.tilesExplored') || 0) + 1, true);
+
+    /* Section 12: companion exploration comment */
+    if ($SM.get('game.companion.alive') && $SM.get('game.companion.present')) {
+      var moves = ($SM.get('game.companion.movesSinceComment') || 0) + 1;
+      var threshold = 3 + Math.floor(Math.random() * 2);
+      if (moves >= threshold) {
+        $SM.set('game.companion.movesSinceComment', 0, true);
+        var comments = Haven.COMPANION_COMMENTS || [];
+        if (comments.length > 0) {
+          var cmt   = comments[Math.floor(Math.random() * comments.length)];
+          var cName = ($SM.get('game.companion.name') || 'your companion').toLowerCase();
+          Engine.setTimeout(function() {
+            Wilds._addLog(cName + ': \u2018' + cmt + '\u2019', 'timestamp');
+          }, 800);
+        }
+      } else {
+        $SM.set('game.companion.movesSinceComment', moves, true);
+      }
+    }
 
     Wilds._logEl.innerHTML = '';
     Wilds._renderMiniMap();
@@ -354,6 +382,8 @@ var Wilds = {
 
       case 'sick':
         Wilds._addLog(Wilds.SICK_FLAVOR[Math.floor(Math.random() * Wilds.SICK_FLAVOR.length)]);
+        /* Section 2E: breadcrumb hint toward adjacent unexplored POI */
+        Wilds._showBreadcrumb(x, y);
         /* GDD §10: rare blighted fox on sick land */
         if (!Wilds._isCleared(x, y) && Math.random() < 0.08) {
           Engine.setTimeout(function() { Wilds._triggerCombat(x, y, 'fox', null); }, 600);
@@ -362,7 +392,7 @@ var Wilds = {
         /* 20% chance to find 1-2 cloth on first visit — ruins of the fallen kingdom */
         if (!Wilds._isSickClothFound(x, y) && Math.random() < 0.2) {
           Wilds._setSickClothFound(x, y);
-          var sickSpace = Wilds.MAX_CARRY - Wilds._getCarryTotal();
+          var sickSpace = Wilds._getMaxCarry() - Wilds._getCarryTotal();
           if (sickSpace > 0) {
             var sickCarry = $SM.get('game.carry') || {};
             var sickCloth = Math.min(1 + Math.floor(Math.random() * 2), sickSpace);
@@ -397,6 +427,7 @@ var Wilds = {
 
       case 'ruin':
         Wilds._addLog('ruins. old stone. the sickness has been here a long time.');
+        Wilds._markReact('nearMemory', 'the mark warms. recognition.');
         if (!Wilds._isCleared(x, y)) {
           if (Math.random() < 0.6) {
             Engine.setTimeout(function() { Wilds._triggerCombat(x, y, 'crawler', 'ruin'); }, 600);
@@ -411,6 +442,7 @@ var Wilds = {
 
       case 'warden':
         Wilds._addLog('a camp. old. someone lived here, kept the sickness back.');
+        Wilds._markReact('nearMemory', 'the mark warms. recognition.');
         if (!Wilds._isCleared(x, y)) {
           if (Math.random() < 0.4) {
             Engine.setTimeout(function() { Wilds._triggerCombat(x, y, 'crawler', 'warden'); }, 600);
@@ -446,6 +478,7 @@ var Wilds = {
         break;
 
       case 'sanctum':
+        Wilds._markReact('nearSanctum', 'the mark burns. it knows this place.');
         var found = ($SM.get('game.memories.found') || []).length;
         if (found < 15) {
           /* GDD §18 exact text */
@@ -464,6 +497,14 @@ var Wilds = {
     }
 
     Wilds._buildActions();
+
+    /* Section 3: idle mark reaction (60s, repeatable) */
+    if (Wilds._idleTimer) clearTimeout(Wilds._idleTimer);
+    Wilds._idleTimer = Engine.setTimeout(function() {
+      if (Engine.activeModule === Wilds && !$SM.get('game.combat.active')) {
+        Wilds._addLog('the mark pulses. waiting.', 'timestamp');
+      }
+    }, 60000);
   },
 
   /* ----------------------------------------------------------------
@@ -479,6 +520,10 @@ var Wilds = {
     $SM.set('game.memories.found', found,        true);
     $SM.set('game.memories.count', found.length, true);
     $SM.set('playStats.memories',  found.length, true);
+    /* Section 3: Aelith mark reaction */
+    if (idx === 7 || idx === 14) {
+      Wilds._markReact('aelith', 'the mark aches. a deep, old ache.');
+    }
 
     Engine.setTimeout(function() {
       var overlay = document.getElementById('markVisionOverlay');
@@ -560,26 +605,26 @@ var Wilds = {
   _renderStatusBar: function() {
     if (!Wilds._descEl) return;
 
-    var torches    = ($SM.get('game.inventory.torches',           true) || 0) +
-                     ($SM.get('game.inventory.reinforcedTorches', true) || 0);
-    var hasLantern = !!$SM.get('game.inventory.markLantern');
-    var food       = $SM.get('stores.food', true);
-    var carry      = Wilds._getCarryTotal();
+    var torchCharges    = $SM.get('game.inventory.torchCharges',    true) || 0;
+    var torchMaxCharges = $SM.get('game.inventory.torchMaxCharges', true) || 0;
+    var hasLantern      = !!$SM.get('game.inventory.markLantern');
+    var food            = $SM.get('stores.food', true);
+    var carry           = Wilds._getCarryTotal();
 
     Wilds._descEl.innerHTML = '';
 
     /* Torch segment */
     var torchSpan = document.createElement('span');
     if (hasLantern) {
-      torchSpan.textContent = 'mark lantern (unlimited)';
-    } else if (torches <= 0) {
+      torchSpan.textContent = 'mark lantern';
+    } else if (torchCharges <= 0 && torchMaxCharges <= 0) {
       torchSpan.textContent = 'no torch.';
       torchSpan.style.color = 'var(--sickness)';
     } else {
       var torchLabel = document.createTextNode('torch: ');
       var torchNum   = document.createElement('span');
-      torchNum.textContent = torches + '/20';
-      if (torches <= 3) torchNum.style.color = 'var(--sickness)';
+      torchNum.textContent = torchCharges + '/' + torchMaxCharges;
+      if (torchCharges <= 3) torchNum.style.color = 'var(--sickness)';
       torchSpan.appendChild(torchLabel);
       torchSpan.appendChild(torchNum);
     }
@@ -600,7 +645,7 @@ var Wilds = {
 
     /* Pack segment */
     var packSpan = document.createElement('span');
-    packSpan.textContent = 'pack: ' + carry + '/' + Wilds.MAX_CARRY;
+    packSpan.textContent = 'pack: ' + carry + '/' + Wilds._getMaxCarry();
 
     Wilds._descEl.appendChild(torchSpan);
     Wilds._descEl.appendChild(document.createTextNode(' \u2502 '));
@@ -622,8 +667,7 @@ var Wilds = {
     var tile = Wilds._getTile(x, y);
 
     var food       = $SM.get('stores.food', true);
-    var torches    = ($SM.get('game.inventory.torches',           true) || 0) +
-                     ($SM.get('game.inventory.reinforcedTorches', true) || 0);
+    var torches    = $SM.get('game.inventory.torchCharges', true) || 0;
     var hasLantern = !!$SM.get('game.inventory.markLantern');
     var wounded    = !!$SM.get('game.player.wounded');
 
@@ -675,7 +719,7 @@ var Wilds = {
       var gBtn = document.createElement('button');
       gBtn.className   = 'action-btn visible';
       gBtn.textContent = tile === 'forest' ? 'gather wood' : 'search cache';
-      gBtn.disabled    = Wilds._getCarryTotal() >= Wilds.MAX_CARRY;
+      gBtn.disabled    = Wilds._getCarryTotal() >= Wilds._getMaxCarry();
       gBtn.addEventListener('click', function() { Wilds._gatherTile(x, y, tile); });
       Wilds._actionsEl.appendChild(gBtn);
     }
@@ -705,7 +749,7 @@ var Wilds = {
   ---------------------------------------------------------------- */
 
   _gatherTile: function(x, y, type) {
-    var space = Wilds.MAX_CARRY - Wilds._getCarryTotal();
+    var space = Wilds._getMaxCarry() - Wilds._getCarryTotal();
     if (space <= 0) { Wilds._addLog('carrying too much. return to haven first.'); return; }
 
     var carry = $SM.get('game.carry') || {};
@@ -716,7 +760,7 @@ var Wilds = {
       carry.wood = (carry.wood || 0) + amt;
       Wilds._addLog(amt + ' wood gathered.');
       /* 20% chance to find 1-2 cloth among the ruins */
-      var spaceLeft = Wilds.MAX_CARRY - Wilds._getCarryTotal() - amt;
+      var spaceLeft = Wilds._getMaxCarry() - Wilds._getCarryTotal() - amt;
       if (spaceLeft > 0 && Math.random() < 0.2) {
         var cloth = Math.min(1 + Math.floor(Math.random() * 2), spaceLeft);
         carry.cloth = (carry.cloth || 0) + cloth;
@@ -760,6 +804,17 @@ var Wilds = {
     $SM.set('game.player.x',       Wilds.START_X, true);
     $SM.set('game.player.y',       Wilds.START_Y, true);
 
+    /* Section 3: return to haven mark reaction */
+    Wilds._markReact('returnHaven', 'the mark steadies. home.');
+
+    /* Section 12: companion returns with player */
+    if ($SM.get('game.companion.alive')) {
+      $SM.set('game.companion.present', false, true);
+    }
+
+    /* Section 10: villager react to player returning */
+    if (typeof Haven !== 'undefined') Engine.setTimeout(function() { Haven._villagerReact('return'); }, 800);
+
     Engine.travelTo(Haven);
   },
 
@@ -784,6 +839,20 @@ var Wilds = {
     Wilds._logEl.innerHTML    = '';
     Wilds._actionsEl.innerHTML = '';
     Wilds._addLog(room.desc);
+
+    /* Section 12: companion sanctum lines */
+    if ($SM.get('game.companion.alive') && $SM.get('game.companion.present')) {
+      var cSancName = ($SM.get('game.companion.name') || 'your companion').toLowerCase();
+      if (roomIdx === 0) {
+        Engine.setTimeout(function() {
+          Wilds._addLog(cSancName + ' looks at the stone steps. \u2018this is it, isn\u2019t it.\u2019', 'timestamp');
+        }, 1000);
+      } else if (roomIdx === 4) {
+        Engine.setTimeout(function() {
+          Wilds._addLog(cSancName + ' reads your face. \u2018you remember. i can see it.\u2019', 'timestamp');
+        }, 3500);
+      }
+    }
 
     /* GDD §10: mark lantern required for final room */
     if (roomIdx === 4 && !$SM.get('game.inventory.markLantern')) {
@@ -897,6 +966,10 @@ var Wilds = {
     Wilds._logEl.innerHTML     = '';
 
     var name  = $SM.get('game.playerName') || 'the mark-bearer';
+    var cEndCompanion    = $SM.get('game.companion');
+    var cEndAlive        = cEndCompanion && !!cEndCompanion.alive;
+    var cEndDied         = cEndCompanion && cEndCompanion.name && !cEndCompanion.alive;
+    var cEndName         = cEndCompanion ? (cEndCompanion.name || '') : '';
     var texts = choice === 'seal' ? [
       name + ' pressed their palm to the Heart.',
       'the mark flows out of you and into the roots. warmth spreads. the sickness screams and withers.',
@@ -916,6 +989,16 @@ var Wilds = {
       'the haven is still there. the people are still there.',
       'whether it\u2019s enough \u2014 you\u2019ll find out together.'
     ];
+
+    /* Section 12: companion ending lines */
+    if (cEndAlive && choice === 'seal') {
+      texts.push(cEndName.toLowerCase() + ' is the last face you see. they\u2019re crying. \u2018it\u2019s not fair,\u2019 they say. but they don\u2019t stop you.');
+    } else if (cEndAlive && choice === 'break') {
+      texts.push(cEndName.toLowerCase() + ' walks out of the sanctum beside you. the daylight hits your faces. \u2018what now?\u2019 they ask.');
+    }
+    if (cEndDied) {
+      texts.push('you think of ' + cEndName.toLowerCase() + '. gone. because of you. because you let them come.');
+    }
 
     var delay = 0;
     texts.forEach(function(t) {
@@ -995,7 +1078,7 @@ var Wilds = {
 
     var hdr = document.createElement('div');
     hdr.className   = 'section-header';
-    hdr.textContent = 'carrying (' + total + '/' + Wilds.MAX_CARRY + ')';
+    hdr.textContent = 'carrying (' + total + '/' + Wilds._getMaxCarry() + ')';
     Wilds._carryEl.appendChild(hdr);
 
     Object.keys(carry).forEach(function(r) {
@@ -1034,9 +1117,90 @@ var Wilds = {
   ---------------------------------------------------------------- */
 
   _onStateUpdate: function(e) {
+    if (Wilds._havenStatusEl && Engine.activeModule === Wilds) {
+      Wilds._updateHavenStatus();
+    }
     if (e.category === 'game' && Wilds.tab) {
       if ($SM.get('game.buildings.watchtower')) Wilds.tab.style.display = '';
     }
+  },
+
+  /* Section 2F — haven status while exploring */
+  _updateHavenStatus: function() {
+    if (!Wilds._havenStatusEl) return;
+    var level    = $SM.get('game.fire.level', true) || 0;
+    var fireName = (Haven && Haven.FIRE_NAMES) ? (Haven.FIRE_NAMES[level] || 'mark only') : 'mark only';
+    var pop      = $SM.get('game.population') || [];
+    var food     = $SM.get('stores.food', true) || 0;
+    var day      = $SM.get('game.day', true) || 0;
+    var fedStr;
+    if (pop.length === 0) {
+      fedStr = 'no villagers';
+    } else if (food >= pop.length) {
+      fedStr = pop.length + ' fed';
+    } else if (food === 0) {
+      fedStr = pop.length + ' hungry';
+    } else {
+      fedStr = food + ' fed, ' + (pop.length - food) + ' hungry';
+    }
+    Wilds._havenStatusEl.textContent = 'haven: ' + fireName + ' | ' + fedStr + ' | day ' + day;
+  },
+
+  /* Section 2E — breadcrumb hints toward adjacent unexplored POIs */
+  _showBreadcrumb: function(x, y) {
+    var PRIORITY = ['sanctum','ruin','warden','den','grove','cache','forest'];
+    var HINTS = {
+      ruin:    'cracked earth. but something catches your eye to the [dir]. worked stone. not natural.',
+      den:     'the mark flickers. something is close. the air feels wrong to the [dir].',
+      grove:   'a faint smell. green. alive. somewhere to the [dir].',
+      warden:  'old footprints in the dust. someone lived nearby. to the [dir].',
+      sanctum: 'the mark burns. something ancient lies to the [dir].',
+      cache:   'scattered debris to the [dir]. could be useful.',
+      forest:  'dead trunks to the [dir]. wood, at least.'
+    };
+    var dirs = [
+      { dx: 0,  dy: -1, label: 'north' },
+      { dx: 0,  dy:  1, label: 'south' },
+      { dx: -1, dy:  0, label: 'west'  },
+      { dx:  1, dy:  0, label: 'east'  }
+    ];
+    var best = null, bestDir = null, bestPri = 999;
+    dirs.forEach(function(d) {
+      var nx = x + d.dx, ny = y + d.dy;
+      if (nx < 0 || nx >= Wilds.MAP_W || ny < 0 || ny >= Wilds.MAP_H) return;
+      if (Wilds._isExplored(nx, ny)) return;
+      var t   = Wilds._getTile(nx, ny);
+      var pri = PRIORITY.indexOf(t);
+      if (pri !== -1 && pri < bestPri) { bestPri = pri; best = t; bestDir = d.label; }
+    });
+    if (best && HINTS[best]) {
+      var hint = HINTS[best].replace('[dir]', bestDir);
+      Engine.setTimeout(function() { Wilds._addLog(hint, 'timestamp'); }, 400);
+    }
+  },
+
+  /* Section 3: one-time mark ambient reactions */
+  _markReact: function(key, text) {
+    if (key !== 'idle' && $SM.get('game.markReactions.' + key)) return;
+    if (key !== 'idle') $SM.set('game.markReactions.' + key, true, true);
+    var logEl = Wilds._logEl;
+    if (!logEl) return;
+    var el = document.createElement('div');
+    el.className = 'narrative timestamp';
+    el.textContent = text;
+    logEl.appendChild(el);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        el.classList.add('visible');
+        logEl.scrollTop = logEl.scrollHeight;
+      });
+    });
+  },
+
+  /* Section 12: companion carry bonus */
+  _getMaxCarry: function() {
+    var bonus = ($SM.get('game.companion.alive') && $SM.get('game.companion.present')) ? 10 : 0;
+    return Wilds.MAX_CARRY + bonus;
   }
 
 };

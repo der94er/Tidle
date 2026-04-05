@@ -29,6 +29,25 @@ var Events = {
     'a child arrives. alone. she says the mark called to her in a dream.'
   ],
 
+  /* Section 4: day-milestone ambient whispers */
+  WHISPERS: {
+    5:  'the mark pulses in your sleep. almost a word.',
+    8:  'you catch yourself drawing a symbol in the dirt. you don\u2019t know what it means.',
+    12: 'a sick deer stumbles into the green patch. by morning, it\u2019s healed.',
+    16: 'the fire crackles. for a moment, you hear a woman\u2019s voice.',
+    20: 'one of the children found a coin. old. the face worn smooth.',
+    25: 'the mark flares at midnight. no one else wakes.',
+    30: 'flowers push through the soil near the fire. small. stubborn.',
+    35: 'a bird nests on the watchtower. it sings at dawn.',
+    40: 'you dream of a room. a table. a meal you can almost taste.',
+    45: 'the green patch reaches further than you expected. life wants to return.',
+    50: 'you catch your reflection in still water. the face is a stranger\u2019s.',
+    55: 'the mark hums a note. low. constant. like a lullaby.',
+    58: 'the oldest villager tells the children a story about the mark-bearers. you listen.',
+    62: 'rain falls. clean rain. the first in anyone\u2019s memory.',
+    65: 'you wake knowing something you didn\u2019t know before. it slips away before you can name it.'
+  },
+
   init: function() {
     Events._wasNight = !!$SM.get('game.isNight');
     Events._lastDay  = $SM.get('game.day', true) || 0;
@@ -53,6 +72,7 @@ var Events = {
       Events._traderLeaveCheck();
       Events._traderCheck();
       Events._ambientCheck();
+      Events._whisperCheck(day);
     }
 
     /* Re-inject trader button if Haven is active but button was cleared */
@@ -123,6 +143,7 @@ var Events = {
         $SM.set('game.population', pop, true);
         $SM.set('playStats.villagersLost', ($SM.get('playStats.villagersLost') || 0) + 1, true);
         Events._addHavenLog(victim.name.toLowerCase() + ' is gone. taken in the night.');
+        if (typeof Haven !== 'undefined') Haven._villagerReact('nightAttack');
         $SM.fireUpdate('game', true);
       }
     }
@@ -265,6 +286,23 @@ var Events = {
     if (pop.length === 0) return;
     var text = Events.AMBIENT_POOL[Math.floor(Math.random() * Events.AMBIENT_POOL.length)];
     Events._addHavenLog(text, 'timestamp');
+  },
+
+  /* ----------------------------------------------------------------
+     Whisper check (Section 4)
+  ---------------------------------------------------------------- */
+
+  _whisperCheck: function(day) {
+    var shown = $SM.get('game.whispers') || {};
+    var text  = Events.WHISPERS[day];
+    if (text && !shown[day]) {
+      shown[day] = true;
+      $SM.set('game.whispers', shown, true);
+      var pop = $SM.get('game.population') || [];
+      if (pop.length > 0) {
+        Events._addHavenLog(text, 'timestamp');
+      }
+    }
   },
 
   /* ----------------------------------------------------------------

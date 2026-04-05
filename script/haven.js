@@ -18,6 +18,7 @@ var Haven = {
   _buildingsEl: null,
   _craftingEl:  null,
   _popEl:       null,
+  _evolEl:      null,
 
   _timers: { gameDay: null, dayNight: null },
   _buildTimer: null,
@@ -120,6 +121,11 @@ var Haven = {
     main.className = 'haven-main';
     layout.appendChild(main);
 
+    Haven._evolEl = document.createElement('div');
+    Haven._evolEl.id        = 'havenEvol';
+    Haven._evolEl.className = 'haven-evol';
+    main.appendChild(Haven._evolEl);
+
     Haven._fireEl = document.createElement('div');
     Haven._fireEl.id = 'havenFire';
     Haven._fireEl.className = 'fire-status';
@@ -192,6 +198,8 @@ var Haven = {
     Haven._restoreStrangerTimers();
 
     Haven._startTimers();
+    Haven._updateEvolText();
+    Haven._checkCompanionTrigger();
   },
 
   /* ----------------------------------------------------------------
@@ -228,6 +236,17 @@ var Haven = {
       $SM.set('game.fire.level', newLevel, true);
       Haven._updateFireDisplay();
 
+      /* Section 2F: ambient messages for player exploring when fire drops */
+      if (typeof Wilds !== 'undefined' && Engine.activeModule === Wilds) {
+        if (newLevel === 2) {
+          Wilds._addLog('a pull in your chest. the fire is weakening.', 'timestamp');
+        } else if (newLevel === 1) {
+          Wilds._addLog('the mark dims. the haven needs you.', 'timestamp');
+        } else if (newLevel === 0) {
+          Wilds._addLog('the mark stutters. the connection is thin. your people are in the dark.', 'timestamp');
+        }
+      }
+
       if (newLevel === 0) {
         /* GDD §12 exact text */
         Haven._addLog('the fire dies. the mark holds alone. the green circle shrinks. the sickness presses close.');
@@ -235,6 +254,7 @@ var Haven = {
       } else if (newLevel === 1) {
         /* GDD §3 Phase 2 exact text */
         Haven._addLog('the fire dims. the mark weakens. the black soil creeps closer.');
+        Haven._villagerReact('fireLow');
       }
     }
 
@@ -244,6 +264,7 @@ var Haven = {
     /* Increment game day (GDD §13 score component) */
     var day = $SM.get('game.day', true);
     $SM.set('game.day', day + 1, true);
+    Haven._checkVillagerStories();
 
     /* GDD §8 — trading post random arrivals */
     Haven._checkTradingPostArrival();
@@ -262,6 +283,10 @@ var Haven = {
 
     if (isNight) {
       Haven._addLog('night falls. the mark glows brighter in the dark.', 'timestamp');
+      /* Section 3: night falls mark reaction */
+      if (typeof Wilds !== 'undefined') {
+        Wilds._markReact('nightFalls', 'the mark brightens in the darkness. a small defiance.');
+      }
       document.body.classList.add('night');
     } else {
       Haven._addLog('dawn. grey and cold. the sickness is thicker in the mornings.', 'timestamp');
@@ -486,6 +511,7 @@ var Haven = {
 
     /* Refresh UI */
     Haven._buildBuildingButtons();
+    Haven._updateEvolText();
     Haven._buildCraftingButtons();
     Haven._buildButtons();
     $SM.fireUpdate('game', true);
@@ -532,6 +558,8 @@ var Haven = {
 
   /* Called after each villager arrives — chains the next arrival */
   _onVillagerArrived: function(strangerIdx) {
+    /* Section 10: existing villagers react to new arrival */
+    Haven._villagerReact('newVillager');
     /* GDD §8: Strangers #4-5 — triggered by lodge built, 120s apart */
     if (strangerIdx === 2 && $SM.get('game.buildings.lodge') && !$SM.get('game.strangers.triggered4')) {
       $SM.set('game.strangers.triggered4', true, true);
@@ -625,7 +653,9 @@ var Haven = {
     var namePool  = Haven.VILLAGER_NAMES.filter(function(n) { return usedNames.indexOf(n) === -1; });
     if (!namePool.length) namePool = Haven.VILLAGER_NAMES; /* fallback: 20 names > 10 villager max */
     var name = namePool[Math.floor(Math.random() * namePool.length)];
-    pop.push({ name: name, assignment: 'idle' });
+    var trait      = Haven._assignTrait();
+    var arrivalDay = $SM.get('game.day', true) || 0;
+    pop.push({ name: name, assignment: 'idle', trait: trait, arrivalDay: arrivalDay, storyCount: 0 });
     $SM.set('game.population', pop, true);
     /* GDD §13 score component: track peak population */
     var maxPop = $SM.get('playStats.maxPop') || 0;
@@ -645,6 +675,8 @@ var Haven = {
     Haven._updatePopDisplay();
     Haven._onVillagerArrived(strangerIdx);
     $SM.fireUpdate('game', true);
+    /* Section 10: personality arrival reaction (after villager is in pop) */
+    Engine.setTimeout(function() { Haven._villagerReact('arrival'); }, 500);
   },
 
   /* GDD §4: last to arrive leaves first */
@@ -848,6 +880,20 @@ var Haven = {
       $SM.add(sk, -recipe.cost[r], true);
     }
 
+    /* Section 1A: Torch and reinforced torch use charge pool */
+    if (recipe.id === 'torch' || recipe.id === 'reinforcedTorch') {
+      var chargesPerItem    = (recipe.id === 'torch') ? 20 : 40;
+      var totalNew          = recipe.qty * chargesPerItem;
+      var curCharges        = $SM.get('game.inventory.torchCharges',    true) || 0;
+      var curMaxCharges     = $SM.get('game.inventory.torchMaxCharges', true) || 0;
+      $SM.set('game.inventory.torchCharges',    curCharges    + totalNew, true);
+      $SM.set('game.inventory.torchMaxCharges', curMaxCharges + totalNew, true);
+      Haven._addLog(recipe.label + ' crafted.');
+      Haven._buildCraftingButtons();
+      $SM.fireUpdate('stores', true);
+      return;
+    }
+
     /* Add to inventory */
     var invKey   = 'game.inventory.' + recipe.inv;
     var existing = $SM.get(invKey);
@@ -860,6 +906,10 @@ var Haven = {
     }
 
     Haven._addLog(recipe.label + ' crafted.');
+    /* Section 10: personality craft reaction for weapons/armor */
+    if (['crudeSword','steelSword','crudeArmor','steelArmor'].indexOf(recipe.id) !== -1) {
+      Haven._villagerReact('craft');
+    }
     Haven._buildCraftingButtons();
     $SM.fireUpdate('stores', true);
   },
@@ -955,6 +1005,11 @@ var Haven = {
 
       $SM.add('stores.wood', -1, true);
       $SM.set('game.fire.level', level + 1);
+
+      /* Section 3: fire blazing mark reaction */
+      if ((level + 1) === 5 && typeof Wilds !== 'undefined') {
+        Wilds._markReact('fireBlaze', 'the mark glows bright. the green patch pulses with warmth.');
+      }
 
       if (level === 0) $SM.set('game.fire.dead', false, true);
 
@@ -1069,7 +1124,265 @@ var Haven = {
       Haven._updatePopDisplay();
       Haven._buildBuildingButtons();
       Haven._buildCraftingButtons();
+      Haven._updateEvolText();
+      Haven._checkCompanionTrigger();
     }
-  }
+  },
+
+  /* Section 5: haven evolution text */
+  _updateEvolText: function() {
+    if (!Haven._evolEl) return;
+    var buildings = 0;
+    ['hearth','forge','hut','lodge','storehouse','workshop','watchtower','herbalistHut','tradingPost']
+      .forEach(function(k) { if ($SM.get('game.buildings.' + k)) buildings++; });
+    var text;
+    if      (buildings <= 1) text = 'a fire in the ruins. the green patch is small. fragile. the sickness presses close.';
+    else if (buildings <= 3) text = 'a camp. rough but standing. the green pushes back against the black soil.';
+    else if (buildings <= 5) text = 'a settlement takes shape. the air smells cleaner here. someone planted seeds.';
+    else if (buildings <= 7) text = 'a village. paths worn between buildings. smoke rising. it looks almost normal.';
+    else if (buildings <= 9) text = 'a haven. gardens growing. children playing in the green. the mark hums steady.';
+    else                     text = 'a home. walls strong. people safe. the green stretches wide. you built this from nothing.';
+    Haven._evolEl.textContent = text;
+  },
+
+  /* Section 10: assign personality trait */
+  _assignTrait: function() {
+    var pool = $SM.get('game.traitPool');
+    if (!pool || !pool.length) {
+      pool = ['curious', 'practical', 'fearful', 'spiritual', 'quiet'];
+      for (var i = pool.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+      }
+    }
+    var trait = pool.shift();
+    $SM.set('game.traitPool', pool, true);
+    return trait;
+  },
+
+  /* Section 10: villager personality reaction */
+  _villagerReact: function(eventKey) {
+    if (Math.random() > 0.6) return;
+    var pop = $SM.get('game.population') || [];
+    if (!pop.length) return;
+    var v = pop[Math.floor(Math.random() * pop.length)];
+    if (!v || !v.trait) return;
+    var lines = Haven.PERSONALITY_LINES[v.trait];
+    if (!lines || !lines[eventKey]) return;
+    var text = lines[eventKey];
+    if (v.trait === 'quiet') {
+      Haven._addLog(text, 'timestamp');
+    } else {
+      Haven._addLog(v.name.toLowerCase() + ': \u2018' + text + '\u2019', 'timestamp');
+    }
+  },
+
+  /* Section 11: villager stories */
+  _checkVillagerStories: function() {
+    var pop     = $SM.get('game.population') || [];
+    var day     = $SM.get('game.day', true) || 0;
+    var changed = false;
+
+    pop.forEach(function(v) {
+      if (v.arrivalDay === undefined) { v.arrivalDay = day; changed = true; }
+      if (v.storyCount === undefined) { v.storyCount = 0;   changed = true; }
+
+      var daysPresent = day - v.arrivalDay;
+      var sc          = v.storyCount;
+
+      if (sc === 0 && daysPresent >= 10) {
+        Haven._tellVillagerStory(v, 0);
+        v.storyCount    = 1;
+        v.nextStoryDay  = day + 8 + Math.floor(Math.random() * 5);
+        changed         = true;
+      } else if (sc === 1 && v.nextStoryDay && day >= v.nextStoryDay) {
+        Haven._tellVillagerStory(v, 1);
+        v.storyCount   = 2;
+        v.nextStoryDay = day + 8 + Math.floor(Math.random() * 5);
+        changed        = true;
+      } else if (sc === 2 && v.nextStoryDay && day >= v.nextStoryDay) {
+        Haven._tellVillagerStory(v, 2);
+        v.storyCount = 3;
+        changed      = true;
+      }
+    });
+
+    if (changed) $SM.set('game.population', pop, true);
+  },
+
+  _tellVillagerStory: function(v, storyIdx) {
+    var stories = Haven.VILLAGER_STORIES[v.trait || 'quiet'];
+    if (!stories || !stories[storyIdx]) return;
+    var text = stories[storyIdx];
+    if (v.trait === 'quiet') {
+      Haven._addLog(text, 'timestamp');
+    } else {
+      Haven._addLog(v.name.toLowerCase() + ': \u2018' + text + '\u2019', 'timestamp');
+    }
+  },
+
+  /* Section 12: companion trigger */
+  _checkCompanionTrigger: function() {
+    if ($SM.get('game.companion.eventShown')) return;
+    if ($SM.get('game.companion.refused'))    return;
+    if ($SM.get('game.companion.alive'))      return;
+
+    var pop      = $SM.get('game.population') || [];
+    var tiles    = $SM.get('playStats.tilesExplored') || 0;
+    var hasSword = !!$SM.get('game.inventory.steelSword');
+
+    if (pop.length < 6 || tiles < 20 || !hasSword) return;
+
+    $SM.set('game.companion.eventShown', true, true);
+
+    var companionV = null;
+    for (var i = 0; i < pop.length; i++) {
+      if (pop[i].trait === 'curious') { companionV = pop[i]; break; }
+    }
+    if (!companionV) companionV = pop[0];
+    if (!companionV) return;
+
+    var cTrigName = companionV.name;
+    Haven._addLog(cTrigName + ' approaches after you return from the wilds.', 'timestamp');
+    Engine.setTimeout(function() {
+      Haven._addLog('\u2018let me come with you. i can carry supplies. i can fight.\u2019');
+      Engine.setTimeout(function() {
+        Haven._addLog('\u2018you shouldn\u2019t go alone out there.\u2019');
+        Engine.setTimeout(function() {
+          var takeBtn = document.createElement('button');
+          takeBtn.className   = 'action-btn visible';
+          takeBtn.textContent = 'take them';
+          takeBtn.addEventListener('click', function() {
+            Haven._takeCompanion(companionV);
+            takeBtn.parentNode && takeBtn.parentNode.removeChild(takeBtn);
+            refuseBtn.parentNode && refuseBtn.parentNode.removeChild(refuseBtn);
+          });
+          var refuseBtn = document.createElement('button');
+          refuseBtn.className   = 'action-btn visible';
+          refuseBtn.textContent = 'too dangerous';
+          refuseBtn.addEventListener('click', function() {
+            $SM.set('game.companion.refused', true, true);
+            Haven._addLog('\u2026i understand.', 'timestamp');
+            Engine.setTimeout(function() {
+              Haven._addLog(cTrigName.toLowerCase() + ' watches you leave alone. says nothing.', 'timestamp');
+            }, 3000);
+            takeBtn.parentNode   && takeBtn.parentNode.removeChild(takeBtn);
+            refuseBtn.parentNode && refuseBtn.parentNode.removeChild(refuseBtn);
+          });
+          Haven._actionsEl.appendChild(takeBtn);
+          Haven._actionsEl.appendChild(refuseBtn);
+        }, 1500);
+      }, 1000);
+    }, 800);
+  },
+
+  _takeCompanion: function(v) {
+    $SM.set('game.companion', {
+      name:              v.name,
+      trait:             v.trait || 'curious',
+      alive:             true,
+      present:           false,
+      movesSinceComment: 0
+    }, true);
+    Haven._addLog(v.name.toLowerCase() + ' joins you.', 'timestamp');
+
+    /* Remove from population */
+    var pop = $SM.get('game.population') || [];
+    var idx = -1;
+    for (var i = 0; i < pop.length; i++) {
+      if (pop[i].name === v.name) { idx = i; break; }
+    }
+    if (idx !== -1) {
+      Haven._clearVillagerIncome(idx);
+      pop.splice(idx, 1);
+      $SM.set('game.population', pop, true);
+    }
+    Haven._updatePopDisplay();
+    $SM.fireUpdate('game', true);
+  },
+
+  /* Section 10: villager personality reaction lines */
+  PERSONALITY_LINES: {
+    curious: {
+      arrival:     'what is that mark? i\u2019ve never seen anything like it.',
+      return:      'what did you find out there? tell me everything.',
+      fireLow:     '\u2026do you think the sickness can reach us here?',
+      nightAttack: 'did you see what they looked like? were they always like that?',
+      craft:       'are you expecting trouble out there?',
+      newVillager: 'another one. the mark is getting stronger.'
+    },
+    practical: {
+      arrival:     'you need help. i can work.',
+      return:      'good. we were running low.',
+      fireLow:     'the fire needs wood. i\u2019ll handle it.',
+      nightAttack: 'we need better walls.',
+      craft:       'about time.',
+      newVillager: 'more hands. good.'
+    },
+    fearful: {
+      arrival:     'please. the sickness is everywhere else. let me stay.',
+      return:      'you came back. i wasn\u2019t sure you would.',
+      fireLow:     'it\u2019s getting cold. that means it\u2019s getting closer.',
+      nightAttack: 'i can\u2019t do this. i can\u2019t.',
+      craft:       'is it that bad out there?',
+      newVillager: 'more people. more mouths. is there enough?'
+    },
+    spiritual: {
+      arrival:     'the mark. the old stories were true.',
+      return:      'the land speaks through you. can you hear it?',
+      fireLow:     'the mark is tired. like the ones before.',
+      nightAttack: 'the sickness is testing us.',
+      craft:       'the old wardens carried blades too. it didn\u2019t save them.',
+      newVillager: 'the mark calls. they answer. as it has always been.'
+    },
+    quiet: {
+      arrival:     '(says nothing. sits by the fire.)',
+      return:      '(nods.)',
+      fireLow:     '(stares at the ember. says nothing.)',
+      nightAttack: '(holds a stone. knuckles white.)',
+      craft:       '(watches closely.)',
+      newVillager: '(makes room by the fire.)'
+    }
+  },
+
+  /* Section 11: villager story fragments per trait */
+  VILLAGER_STORIES: {
+    curious: [
+      'i was a teacher. before. the children\u2026 (stops.)',
+      'i kept one book. hid it from the sickness. i read it to myself some nights.',
+      'if the sickness ends\u2026 do you think the schools could come back?'
+    ],
+    practical: [
+      'i walked for six days to reach the mark\u2019s glow.',
+      'i buried my husband on day two of the walk. kept going.',
+      'don\u2019t tell me if you\u2019re not planning to come back from out there.'
+    ],
+    fearful: [
+      'i watched my village disappear. the black just\u2026 swallowed it.',
+      'i still hear them sometimes. calling from the sick land.',
+      'promise me you won\u2019t leave us. promise.'
+    ],
+    spiritual: [
+      'my mother spoke of the mark-bearers. she said they were chosen.',
+      'i pray to the old stones. i don\u2019t know if anything hears.',
+      'you carry more than the mark. you carry all of us.'
+    ],
+    quiet: [
+      '(you find a small carving by the fire. a bird. delicate.)',
+      '(a flower appears at your door. no one claims it.)',
+      '(the quiet one catches your eye. holds it. looks away.)'
+    ]
+  },
+
+  /* Section 12: companion exploration comments */
+  COMPANION_COMMENTS: [
+    'this place\u2026 people lived here once.',
+    'the mark is brighter when you walk.',
+    'do you remember any of it? the life before?',
+    'i\u2019m glad i came.',
+    'the sickness is thick here. stay close.',
+    'look \u2014 was that a bird? i haven\u2019t seen one outside the haven.',
+    'what do you think the wardens felt? at the end?'
+  ]
 
 };

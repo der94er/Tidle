@@ -967,3 +967,93 @@ the-last-ember/
 - Accessibility pass
 - Final bug testing
 - Deploy to GitHub Pages
+
+---
+
+## 21. COMPREHENSIVE UPDATE v1.2
+
+### 1A. Torch System
+- Torches replaced with charge pool: `game.inventory.torchCharges` and `torchMaxCharges`
+- Regular torch (×5): +100 charges (20 per item) | Reinforced torch (×5): +200 charges (40 per item)
+- Each unexplored move: -1 charge | Mark lantern: unlimited
+- Display: "torch: X/Y" where X=current, Y=max accumulated
+
+### 2A. Map Size
+- Shrunk from 20×20 (400 tiles) to 12×12 (144 tiles)
+- Player starts at (6,6) center | Sanctum at (11,11)
+- Same 54 POIs: 10 ruins, 5 warden camps, 5 dens, 3 groves, 1 sanctum, 15 caches, 15 forests
+- Leaderboard deepest exploration max = 144 tiles
+
+### 2E. Breadcrumbs
+- Sick tiles adjacent to unexplored POIs show directional hints (italic timestamp style)
+- Priority order: sanctum > ruin > warden > den > grove > cache > forest
+- Only shows hints toward unexplored adjacent tiles
+
+### 2F. Haven Status While Exploring
+- Status bar at top of wilds view: "haven: [fire name] | [fed status] | day [N]"
+- Fire-drop messages in wilds log when fire drops to: small fire, flicker, ember
+
+### 3. Mark Reactions (11 ambient notifications)
+- First wilds entry | Near memory (ruin/warden) | Combat start | Combat won
+- Near sanctum | Return to haven | Idle 60s (repeatable) | After mark's light
+- Fire blazing | Night falls | After Aelith memory (#7 or #14)
+
+### 4. Ambient Story Whispers
+- 15 whispers at day milestones: days 5, 8, 12, 16, 20, 25, 30, 35, 40, 45, 50, 55, 58, 62, 65
+- Each triggers once, italic/timestamp style, only if villagers present
+
+### 5. Haven Evolution Text
+- 6 descriptions based on building count (0-1, 2-3, 4-5, 6-7, 8-9, 10)
+- Updates dynamically as player builds
+
+### 6. Grave Memory Conditionals
+- 10+ memories: "you remember more now. but not everything. not yet."
+- 20+ memories: "you almost remember your name."
+- After memory #25: "[player name]. your name is [player name]."
+
+### 9. Mark's Light Combat Option
+- Available for: blighted fox, root crawler, sickness shade only
+- Costs 5 torch charges (0 with mark lantern)
+- Fox healed → 2-4 herbs | Crawler healed → 3-5 wood | Shade healed → 1 mark fragment
+- Score: creaturesHealed × 20
+
+### 10. Villager Personalities
+- 5 traits: curious, practical, fearful, spiritual, quiet
+- Assigned on arrival, no duplicates until all 5 used (then repeat)
+- 6 reaction events per trait: arrival, return, fireLow, nightAttack, craft, newVillager
+- 60% chance any event fires a reaction from one random villager
+
+### 11. Villager Stories
+- Triggers when villager present 10+ days, then every 8-12 days, max 3 stories
+- Story fragments per trait. Tracked via arrivalDay, storyCount, nextStoryDay per villager.
+
+### 12. Companion System
+- Trigger: 6+ villagers AND 20+ tiles explored AND steel sword (one-time event)
+- Curious villager (or first available) offers to join
+- If taken: pack capacity +10, combat attack +2, villager removed from assignments
+- 7 exploration comments shown every 3-4 moves
+- Combat reactions: readies weapon | catches breath grins | runs beside you
+- 50% chance companion dies on player defeat
+- Score: companion alive +100 | companion died -150 | not taken ±0
+
+### Updated Score Formula
+```
+score = (memories × 100)
+      + (buildings × 50)
+      + (max_population × 25)
+      + (combat_wins × 15)
+      + (tiles_explored × 2)
+      + (days_survived × 3)
+      + (extra_mark_fragments × 50)
+      + (seal_ending × 500)
+      + (creatures_healed × 20)
+      + companion_bonus (+100 alive / -150 died / 0 not taken)
+      - (villagers_lost × 100)
+      - (combat_retreats × 25)
+```
+
+### Contradiction Check Update
+- Map 12×12: 144 tiles, 54 POIs = 37.5% density. Exploration feels rich (vs 13.5% for 20×20). ✓
+- Torch charges: 100 charges per regular craft batch. 12×12 needs ~100-150 charges typical run. ✓
+- Companion: max pop 10, companion removed → effective haven pop 9. Lodge still required. ✓
+- Score formula: theoretical max increases by ~620 (25 healed + companion alive). Still bounded. ✓

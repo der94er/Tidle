@@ -20,6 +20,12 @@ var Leaderboard = {
     var villagersLost = $SM.get('playStats.villagersLost')   || 0;
     var retreats      = $SM.get('playStats.combatRetreats')  || 0;
     var extraFrags    = $SM.get('stores.markFragments')      || 0;
+    var creaturesHealed = $SM.get('playStats.creaturesHealed') || 0;
+    var companion       = $SM.get('game.companion');
+    var companionBonus  = 0;
+    if (companion && companion.name) {
+      companionBonus = companion.alive ? 100 : -150;
+    }
 
     /* Count buildings built (9 buildable, GDD §6) */
     var buildings = 0;
@@ -34,6 +40,8 @@ var Leaderboard = {
          + (days          *   3)
          + (extraFrags    *  50)
          + (sealEnding    * 500)
+         + (creaturesHealed * 20)
+         + companionBonus
          - (villagersLost * 100)
          - (retreats      *  25);
   },
@@ -116,6 +124,16 @@ var Leaderboard = {
     Leaderboard._stat('tiles explored',     tilesExplored,   2,   false);
     Leaderboard._stat('days survived',      days,            3,   false);
     if (extraFrags > 0)    Leaderboard._stat('extra fragments', extraFrags, 50, false);
+    var creaturesHealed = $SM.get('playStats.creaturesHealed') || 0;
+    var companion       = $SM.get('game.companion');
+    if (creaturesHealed > 0) Leaderboard._stat('creatures healed', creaturesHealed, 20, false);
+    if (companion && companion.name) {
+      if (companion.alive) {
+        Leaderboard._line('companion survived: +100', 'score-stat');
+      } else {
+        Leaderboard._line('companion lost: \u2212150', 'score-stat');
+      }
+    }
     if (sealEnding)        Leaderboard._line('seal ending: +500', 'score-stat');
     if (villagersLost > 0) Leaderboard._stat('villagers lost',  villagersLost, 100, true);
     if (retreats > 0)      Leaderboard._stat('retreats',        retreats,       25, true);
