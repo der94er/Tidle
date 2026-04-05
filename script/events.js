@@ -10,14 +10,19 @@ var Events = {
   _wasNight: false,
   _lastDay:  0,
 
-  /* GDD §14 — trader goods table (exact values) */
+  /* GDD §14 — trader goods table (6 store trades + 4 item trades from FIX 3) */
   TRADE_TABLE: [
-    { offer: { cloth: 5 },           want: { iron: 5 },            rare: false },
-    { offer: { herbs: 5 },           want: { wood: 5 },            rare: false },
-    { offer: { iron: 3 },            want: { stone: 5 },           rare: false },
-    { offer: { markFragments: 1 },   want: { iron: 20, cloth: 10 }, rare: true  },
-    { offer: { food: 10 },           want: { herbs: 5 },           rare: false },
-    { offer: { cloth: 3, herbs: 3 }, want: { stone: 10 },          rare: false }
+    { offer: { cloth: 5 },           want: { iron: 5 },                            rare: false },
+    { offer: { herbs: 5 },           want: { wood: 5 },                            rare: false },
+    { offer: { iron: 3 },            want: { stone: 5 },                           rare: false },
+    { offer: { markFragments: 1 },   want: { iron: 20, cloth: 10 },                rare: true  },
+    { offer: { food: 10 },           want: { herbs: 5 },                           rare: false },
+    { offer: { cloth: 3, herbs: 3 }, want: { stone: 10 },                          rare: false },
+    /* FIX 3: item trades (invOffer: true — outcome goes to game.inventory) */
+    { offer: { poultice: 1 },        want: { herbs: 5, cloth: 2 },                 rare: false, invOffer: true },
+    { offer: { bandages: 3 },        want: { cloth: 3, herbs: 2 },                 rare: false, invOffer: true },
+    { offer: { torches: 5 },         want: { wood: 5, cloth: 3, iron: 5 },         rare: false, invOffer: true },
+    { offer: { traps: 1 },           want: { iron: 8, wood: 3 },                   rare: false, invOffer: true }
   ],
 
   /* GDD §3 Phase 3 — ambient flavor events (non-mechanical) */
@@ -287,14 +292,32 @@ var Events = {
       $SM.add(key, -trade.want[r], true);
     });
 
-    /* Add what trader offers (cap-aware) */
-    Object.keys(trade.offer).forEach(function(r) {
-      var key = (r === 'markFragments') ? 'stores.markFragments' : 'stores.' + r;
-      if ($SM.get(key) === undefined) $SM.set(key, 0, true);
-      var cur = $SM.get(key) || 0;
-      var add = Math.min(trade.offer[r], cap - cur);
-      if (add > 0) $SM.add(key, add, true);
-    });
+    /* Add what trader offers */
+    if (trade.invOffer) {
+      /* FIX 3: inventory item trades */
+      Object.keys(trade.offer).forEach(function(item) {
+        if (item === 'torches') {
+          var newCh  = trade.offer[item] * 20;
+          var curCh  = $SM.get('game.inventory.torchCharges',    true) || 0;
+          var curMx  = $SM.get('game.inventory.torchMaxCharges', true) || 0;
+          $SM.set('game.inventory.torchCharges',    curCh + newCh, true);
+          $SM.set('game.inventory.torchMaxCharges', curMx + newCh, true);
+        } else {
+          var invKey = 'game.inventory.' + item;
+          var inv    = $SM.get(invKey, true) || 0;
+          $SM.set(invKey, inv + trade.offer[item], true);
+        }
+      });
+    } else {
+      /* Standard store resource trades (cap-aware) */
+      Object.keys(trade.offer).forEach(function(r) {
+        var key = (r === 'markFragments') ? 'stores.markFragments' : 'stores.' + r;
+        if ($SM.get(key) === undefined) $SM.set(key, 0, true);
+        var cur = $SM.get(key) || 0;
+        var add = Math.min(trade.offer[r], cap - cur);
+        if (add > 0) $SM.add(key, add, true);
+      });
+    }
 
     $SM.fireUpdate('stores', true);
     Events._addHavenLog('traded. she nods and leaves.');

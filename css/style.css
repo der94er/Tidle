@@ -195,6 +195,62 @@ html, body {
   background: var(--mark-amber);
 }
 
+/* --- FIX 1: Expedition loadout screen --- */
+.loadout-screen {
+  margin-bottom: 12px;
+}
+.loadout-label {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  text-transform: lowercase;
+  letter-spacing: 0.05em;
+}
+.loadout-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 0.9em;
+}
+.loadout-item-name {
+  color: var(--text-secondary);
+  min-width: 70px;
+}
+.loadout-item-value {
+  color: var(--text-primary);
+}
+.loadout-adjust {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  font-size: 1em;
+  padding: 0;
+  line-height: 1;
+}
+.loadout-adjust:hover:not(:disabled) {
+  border-color: var(--mark-amber);
+  color: var(--mark-amber);
+}
+.loadout-adjust:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.loadout-count {
+  min-width: 24px;
+  text-align: center;
+  color: var(--text-primary);
+}
+.loadout-pack {
+  margin-top: 8px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+}
+
 /* --- Mark vision overlay (GDD §11) --- */
 /* "screen darkens slightly" — semi-transparent black */
 #markVisionOverlay {

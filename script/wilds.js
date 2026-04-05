@@ -215,13 +215,6 @@ var Wilds = {
       $SM.set('game.companion.movesSinceComment', 0, true);
     }
 
-    /* Final Overhaul §7: capture haven state at departure for return summary */
-    $SM.set('game.wildsDeparture', {
-      fireLevel: $SM.get('game.fire.level', true) || 0,
-      popCount:  ($SM.get('game.population') || []).length,
-      food:      $SM.get('stores.food', true) || 0
-    }, true);
-
     if ($SM.get('game.player.x') === undefined) {
       $SM.set('game.player.x',       Wilds.START_X, true);
       $SM.set('game.player.y',       Wilds.START_Y, true);
@@ -229,6 +222,14 @@ var Wilds = {
       $SM.set('game.player.wounded', false,          true);
       $SM.set('game.carry',          {},             true);
       Wilds._setExplored(Wilds.START_X, Wilds.START_Y);
+    }
+
+    /* FIX 1: show loadout screen before departing; skip if already on expedition */
+    if (!$SM.get('game.wilds.onExpedition')) {
+      Wilds._renderMiniMap();
+      Wilds._updateHavenStatus();
+      Wilds._showLoadout();
+      return;
     }
 
     Wilds._renderMiniMap();
@@ -244,6 +245,203 @@ var Wilds = {
   /* Called by engine.js and haven.js when watchtower is built */
   unlock: function() {
     if (Wilds.tab) Wilds.tab.style.display = '';
+  },
+
+  /* ----------------------------------------------------------------
+     FIX 1: Expedition Loadout Screen
+  ---------------------------------------------------------------- */
+
+  _showLoadout: function() {
+    if (!Wilds._logEl || !Wilds._actionsEl) return;
+
+    Wilds._logEl.innerHTML    = '';
+    Wilds._actionsEl.innerHTML = '';
+    if (Wilds._carryEl) Wilds._carryEl.innerHTML = '';
+
+    var hasSteel    = !!$SM.get('game.inventory.steelSword');
+    var hasCrude    = !!$SM.get('game.inventory.crudeSword');
+    var hasSteelAr  = !!$SM.get('game.inventory.steelArmor');
+    var hasCrudeAr  = !!$SM.get('game.inventory.crudeArmor');
+    var hasLantern  = !!$SM.get('game.inventory.markLantern');
+    var torchCh     = $SM.get('game.inventory.torchCharges', true) || 0;
+
+    var storeFood   = $SM.get('stores.food',              true) || 0;
+    var invBandages = $SM.get('game.inventory.bandages',   true) || 0;
+    var invTraps    = $SM.get('game.inventory.traps',      true) || 0;
+    var invPoultice = $SM.get('game.inventory.poultice',   true) || 0;
+
+    var hasCompanion = !!$SM.get('game.companion.alive');
+    var packCap      = Wilds.MAX_CARRY + (hasCompanion ? 10 : 0);
+
+    /* Mutable pack choices */
+    var choices = {
+      food:     Math.min(10, storeFood),
+      bandages: 0,
+      traps:    0,
+      poultice: 0
+    };
+
+    function packTotal() {
+      return choices.food + choices.bandages + choices.traps + choices.poultice;
+    }
+
+    var screen = document.createElement('div');
+    screen.className = 'loadout-screen';
+
+    /* Title */
+    var title = document.createElement('div');
+    title.className   = 'section-header';
+    title.textContent = 'prepare for the wilds';
+    screen.appendChild(title);
+
+    /* Equipment (read-only) */
+    var eqHdr = document.createElement('div');
+    eqHdr.className   = 'loadout-label';
+    eqHdr.textContent = 'equipment';
+    screen.appendChild(eqHdr);
+
+    var weaponText = hasSteel   ? 'steel sword \u2014 atk +5'  :
+                     hasCrude   ? 'crude sword \u2014 atk +2'  : 'none \u2014 fists only';
+    var armorText  = hasSteelAr ? 'steel armor \u2014 def +5'  :
+                     hasCrudeAr ? 'crude armor \u2014 def +2'  : 'none';
+    var lightText  = hasLantern ? 'mark lantern' :
+                     torchCh > 0 ? 'torch \u2014 ' + torchCh + ' charges' : 'no light source!';
+
+    [['weapon', weaponText], ['armor', armorText], ['light', lightText]].forEach(function(pair) {
+      var row = document.createElement('div');
+      row.className = 'loadout-row';
+      var lbl = document.createElement('span');
+      lbl.className   = 'loadout-item-name';
+      lbl.textContent = pair[0] + ':';
+      var val = document.createElement('span');
+      val.className   = 'loadout-item-value';
+      val.textContent = pair[1];
+      if (pair[0] === 'light' && !hasLantern && torchCh <= 0) val.style.color = 'var(--sickness)';
+      row.appendChild(lbl); row.appendChild(val);
+      screen.appendChild(row);
+    });
+
+    /* Supplies (adjustable) */
+    var supHdr = document.createElement('div');
+    supHdr.className   = 'loadout-label';
+    supHdr.textContent = 'supplies';
+    screen.appendChild(supHdr);
+
+    /* Pack counter */
+    var packEl = document.createElement('div');
+    packEl.className = 'loadout-pack';
+    function updatePackEl() {
+      var tot = packTotal();
+      packEl.textContent = tot + ' / ' + packCap + ' pack slots';
+      packEl.style.color = tot > packCap ? 'var(--sickness)' : 'var(--text-secondary)';
+    }
+
+    var setOutBtn; /* forward ref for enable/disable */
+
+    function makeAdjRow(label, key, maxVal) {
+      var row = document.createElement('div');
+      row.className = 'loadout-row';
+
+      var lbl = document.createElement('span');
+      lbl.className   = 'loadout-item-name';
+      lbl.textContent = label + ':';
+
+      var minus = document.createElement('button');
+      minus.className   = 'loadout-adjust';
+      minus.textContent = '\u2212';
+
+      var cnt = document.createElement('span');
+      cnt.className   = 'loadout-count';
+      cnt.textContent = String(choices[key]);
+
+      var plus = document.createElement('button');
+      plus.className   = 'loadout-adjust';
+      plus.textContent = '+';
+
+      minus.addEventListener('click', function() {
+        if (choices[key] > 0) {
+          choices[key]--;
+          cnt.textContent = String(choices[key]);
+          updatePackEl();
+          if (setOutBtn) setOutBtn.disabled = packTotal() > packCap;
+        }
+      });
+      plus.addEventListener('click', function() {
+        if (choices[key] < maxVal && packTotal() < packCap) {
+          choices[key]++;
+          cnt.textContent = String(choices[key]);
+          updatePackEl();
+          if (setOutBtn) setOutBtn.disabled = packTotal() > packCap;
+        }
+      });
+
+      if (maxVal === 0) {
+        lbl.style.color  = 'var(--text-secondary)';
+        minus.disabled   = true;
+        plus.disabled    = true;
+      }
+
+      row.appendChild(lbl); row.appendChild(minus); row.appendChild(cnt); row.appendChild(plus);
+      screen.appendChild(row);
+    }
+
+    makeAdjRow('food',     'food',     storeFood);
+    makeAdjRow('bandages', 'bandages', invBandages);
+    makeAdjRow('traps',    'traps',    invTraps);
+    makeAdjRow('poultice', 'poultice', invPoultice);
+
+    screen.appendChild(packEl);
+    updatePackEl();
+
+    /* Buttons */
+    setOutBtn             = document.createElement('button');
+    setOutBtn.className   = 'action-btn visible';
+    setOutBtn.textContent = 'set out';
+    setOutBtn.addEventListener('click', function() { Wilds._setOut(choices); });
+    screen.appendChild(setOutBtn);
+
+    var stayBtn             = document.createElement('button');
+    stayBtn.className   = 'action-btn visible';
+    stayBtn.textContent = 'stay';
+    stayBtn.addEventListener('click', function() { Engine.travelTo(Haven); });
+    screen.appendChild(stayBtn);
+
+    Wilds._actionsEl.appendChild(screen);
+  },
+
+  _setOut: function(choices) {
+    /* Remove items from stores/inventory */
+    if (choices.food     > 0) $SM.add('stores.food',               -choices.food,     true);
+    if (choices.bandages > 0) $SM.add('game.inventory.bandages',   -choices.bandages, true);
+    if (choices.traps    > 0) $SM.add('game.inventory.traps',      -choices.traps,    true);
+    if (choices.poultice > 0) $SM.add('game.inventory.poultice',   -choices.poultice, true);
+
+    /* Put chosen items in carry */
+    var carry = {};
+    if (choices.food     > 0) carry.food     = choices.food;
+    if (choices.bandages > 0) carry.bandages = choices.bandages;
+    if (choices.traps    > 0) carry.traps    = choices.traps;
+    if (choices.poultice > 0) carry.poultice = choices.poultice;
+    $SM.set('game.carry', carry, true);
+
+    /* Capture haven state for return summary */
+    $SM.set('game.wildsDeparture', {
+      fireLevel: $SM.get('game.fire.level', true) || 0,
+      popCount:  ($SM.get('game.population') || []).length,
+      food:      $SM.get('stores.food', true) || 0
+    }, true);
+
+    $SM.set('game.wilds.onExpedition', true, true);
+
+    /* Clear loadout and show wilds */
+    Wilds._logEl.innerHTML    = '';
+    Wilds._actionsEl.innerHTML = '';
+    if (Wilds._carryEl) Wilds._carryEl.innerHTML = '';
+
+    Wilds._showCurrentTile();
+    Wilds._buildActions();
+    Wilds._renderCarry();
+    Wilds._markReact('firstEntry', 'the mark dims slightly. it doesn\u2019t like being far from the fire.');
   },
 
   /* ----------------------------------------------------------------
@@ -322,8 +520,8 @@ var Wilds = {
       return;
     }
 
-    /* GDD §9: costs 1 food per tile */
-    if ($SM.get('stores.food', true) < 1) {
+    /* GDD §9: costs 1 food per tile (FIX 1: from carry) */
+    if ((($SM.get('game.carry') || {}).food || 0) < 1) {
       Wilds._addLog('no food. cannot move.');
       return;
     }
@@ -340,7 +538,10 @@ var Wilds = {
       $SM.add('game.inventory.torchCharges', -1, true);
     }
 
-    $SM.add('stores.food', -1, true);
+    /* FIX 1: food comes from carry, not stores */
+    var _mvCarry = $SM.get('game.carry') || {};
+    _mvCarry.food = Math.max(0, (_mvCarry.food || 0) - 1);
+    $SM.set('game.carry', _mvCarry, true);
     $SM.set('game.player.x', nx, true);
     $SM.set('game.player.y', ny, true);
     Wilds._setExplored(nx, ny);
@@ -569,15 +770,24 @@ var Wilds = {
         var _dy   = y - Wilds.START_Y;
         var _dist = Math.floor(Math.sqrt(_dx * _dx + _dy * _dy));
         var _eKey;
-        if (_dist <= 3) {
-          _eKey = 'fox';
-        } else if (_dist <= 6) {
-          _eKey = Math.random() < 0.5 ? 'fox' : 'crawler';
+        if (_dist <= 3)      _eKey = 'fox';
+        else if (_dist <= 6) _eKey = Math.random() < 0.5 ? 'fox' : 'crawler';
+        else                 _eKey = Math.random() < 0.5 ? 'crawler' : 'shade';
+
+        /* FIX 2: check for trap — auto-kills fox and crawler */
+        var _trapMap13 = $SM.get('game.map.traps') || {};
+        var _tKey13    = Wilds._key(x, y);
+        if (_trapMap13[_tKey13] && (_eKey === 'fox' || _eKey === 'crawler')) {
+          delete _trapMap13[_tKey13];
+          $SM.set('game.map.traps', _trapMap13, true);
+          $SM.set('playStats.combatWins', ($SM.get('playStats.combatWins') || 0) + 1, true);
+          Wilds._addLog('the trap springs. a ' + Wilds.ENEMIES[_eKey].name + ' caught. the remains dissolve.');
+          Wilds._renderMiniMap();
+          /* fall through to _buildActions */
         } else {
-          _eKey = Math.random() < 0.5 ? 'crawler' : 'shade';
+          Engine.setTimeout(function() { Wilds._triggerCombat(x, y, _eKey, 'random'); }, 600);
+          return;
         }
-        Engine.setTimeout(function() { Wilds._triggerCombat(x, y, _eKey, 'random'); }, 600);
-        return;
       }
     }
 
@@ -714,9 +924,18 @@ var Wilds = {
   _microCellar: function(x, y) {
     var roll = Math.random();
     if (roll < 0.4) {
-      var amt = 5 + Math.floor(Math.random() * 4); /* 5-8 food */
-      $SM.add('stores.food', amt);
-      Wilds._addLog(amt + ' food. preserved stores.', 'timestamp');
+      var amt = 5 + Math.floor(Math.random() * 4); /* 5-8 food; goes to carry */
+      var _space = Wilds._getMaxCarry() - Wilds._getCarryTotal();
+      var _take = Math.min(amt, _space);
+      if (_take > 0) {
+        var _celf = $SM.get('game.carry') || {};
+        _celf.food = (_celf.food || 0) + _take;
+        $SM.set('game.carry', _celf, true);
+        Wilds._addLog(_take + ' food. preserved stores.', 'timestamp');
+        Wilds._renderCarry();
+      } else {
+        Wilds._addLog('food. no room to carry it.', 'timestamp');
+      }
     } else if (roll < 0.8) {
       var amt2 = 2 + Math.floor(Math.random() * 3); /* 2-4 iron */
       var space = Wilds._getMaxCarry() - Wilds._getCarryTotal();
@@ -749,7 +968,7 @@ var Wilds = {
 
   _showHazardChasm: function(x, y) {
     Wilds._actionsEl.innerHTML = '';
-    var food = $SM.get('stores.food', true);
+    var food = ($SM.get('game.carry') || {}).food || 0; /* FIX 1 */
 
     function makeBtn(label, fn) {
       var btn = document.createElement('button');
@@ -763,10 +982,8 @@ var Wilds = {
     }
 
     makeBtn('cross on the fallen tree', function() {
-      /* Safe, costs 2 extra food */
-      if (food >= 2) {
-        $SM.add('stores.food', -2, true);
-      }
+      /* Safe, costs 2 extra food (from carry) */
+      if (food >= 2) { var _cc1 = $SM.get('game.carry')||{}; _cc1.food=Math.max(0,(_cc1.food||0)-2); $SM.set('game.carry',_cc1,true); }
       Wilds._setCleared(x, y);
       Wilds._addLog('you edge across the tree. slow. careful.', 'timestamp');
       Wilds._buildActions();
@@ -785,9 +1002,7 @@ var Wilds = {
     });
 
     makeBtn('go around', function() {
-      if (food >= 2) {
-        $SM.add('stores.food', -2, true);
-      }
+      if (food >= 2) { var _cc2 = $SM.get('game.carry')||{}; _cc2.food=Math.max(0,(_cc2.food||0)-2); $SM.set('game.carry',_cc2,true); }
       Wilds._setCleared(x, y);
       Wilds._addLog('a long way around. but you make it.', 'timestamp');
       Wilds._buildActions();
@@ -798,7 +1013,7 @@ var Wilds = {
     Wilds._actionsEl.innerHTML = '';
     var torches    = $SM.get('game.inventory.torchCharges', true) || 0;
     var hasLantern = !!$SM.get('game.inventory.markLantern');
-    var food       = $SM.get('stores.food', true);
+    var food       = ($SM.get('game.carry') || {}).food || 0; /* FIX 1 */
 
     function makeBtn(label, disabled, fn) {
       var btn = document.createElement('button');
@@ -820,19 +1035,27 @@ var Wilds = {
         if (!hasLantern) $SM.add('game.inventory.torchCharges', -3, true);
         Wilds._setCleared(x, y);
         Wilds._addLog('you push through the fog. disoriented but unharmed.', 'timestamp');
+        /* FIX 3: fog corrodes 1 iron from pack */
+        var _fogCarry = $SM.get('game.carry') || {};
+        if ((_fogCarry.iron || 0) > 0) {
+          _fogCarry.iron = _fogCarry.iron - 1;
+          $SM.set('game.carry', _fogCarry, true);
+          Wilds._addLog('the fog eats at the metal. iron corrodes.', 'timestamp');
+          Wilds._renderCarry();
+        }
         Wilds._buildActions();
       }
     );
 
     makeBtn('wait for it to pass', false, function() {
-      if (food >= 1) $SM.add('stores.food', -1, true);
+      if (food >= 1) { var _fc3 = $SM.get('game.carry')||{}; _fc3.food=Math.max(0,(_fc3.food||0)-1); $SM.set('game.carry',_fc3,true); }
       Wilds._setCleared(x, y);
       Wilds._addLog('you wait. the fog lifts. the path is clear.', 'timestamp');
       Wilds._buildActions();
     });
 
     makeBtn('find another way', false, function() {
-      if (food >= 2) $SM.add('stores.food', -2, true);
+      if (food >= 2) { var _fc4 = $SM.get('game.carry')||{}; _fc4.food=Math.max(0,(_fc4.food||0)-2); $SM.set('game.carry',_fc4,true); }
       Wilds._setCleared(x, y);
       Wilds._addLog('a longer route. you avoid the fog.', 'timestamp');
       Wilds._buildActions();
@@ -842,7 +1065,7 @@ var Wilds = {
   _showHazardBridge: function(x, y) {
     Wilds._actionsEl.innerHTML = '';
     var health = $SM.get('game.player.health', true) || 100;
-    var food   = $SM.get('stores.food', true);
+    var food   = ($SM.get('game.carry') || {}).food || 0; /* FIX 1 */
 
     function makeBtn(label, fn) {
       var btn = document.createElement('button');
@@ -903,7 +1126,7 @@ var Wilds = {
     });
 
     makeBtn('search for a crossing', function() {
-      if (food >= 2) $SM.add('stores.food', -2, true);
+      if (food >= 2) { var _bc1 = $SM.get('game.carry')||{}; _bc1.food=Math.max(0,(_bc1.food||0)-2); $SM.set('game.carry',_bc1,true); }
       Wilds._setCleared(x, y);
       Wilds._addLog('you find a shallow point upstream. you cross safely.', 'timestamp');
       Wilds._buildActions();
@@ -915,7 +1138,7 @@ var Wilds = {
     var hasSword   = !!$SM.get('game.inventory.steelSword') || !!$SM.get('game.inventory.crudeSword');
     var torches    = $SM.get('game.inventory.torchCharges', true) || 0;
     var hasLantern = !!$SM.get('game.inventory.markLantern');
-    var food       = $SM.get('stores.food', true);
+    var food       = ($SM.get('game.carry') || {}).food || 0; /* FIX 1 */
 
     function makeBtn(label, disabled, fn) {
       var btn = document.createElement('button');
@@ -931,7 +1154,7 @@ var Wilds = {
     }
 
     makeBtn('cut through', !hasSword, function() {
-      if (food >= 1) $SM.add('stores.food', -1, true);
+      if (food >= 1) { var _tc1 = $SM.get('game.carry')||{}; _tc1.food=Math.max(0,(_tc1.food||0)-1); $SM.set('game.carry',_tc1,true); }
       Wilds._setCleared(x, y);
       Wilds._addLog('you hack through the thorns. the mark steadies you.', 'timestamp');
       Wilds._buildActions();
@@ -949,7 +1172,7 @@ var Wilds = {
     );
 
     makeBtn('go around', false, function() {
-      if (food >= 2) $SM.add('stores.food', -2, true);
+      if (food >= 2) { var _tc2 = $SM.get('game.carry')||{}; _tc2.food=Math.max(0,(_tc2.food||0)-2); $SM.set('game.carry',_tc2,true); }
       Wilds._setCleared(x, y);
       Wilds._addLog('a long detour. but you pass.', 'timestamp');
       Wilds._buildActions();
@@ -1061,7 +1284,9 @@ var Wilds = {
     var torchCharges    = $SM.get('game.inventory.torchCharges',    true) || 0;
     var torchMaxCharges = $SM.get('game.inventory.torchMaxCharges', true) || 0;
     var hasLantern      = !!$SM.get('game.inventory.markLantern');
-    var food            = $SM.get('stores.food', true);
+    var carryObj        = $SM.get('game.carry') || {};
+    var food            = carryObj.food    || 0; /* FIX 1: food from carry */
+    var bandagesCarried = carryObj.bandages || 0;
     var carry           = Wilds._getCarryTotal();
 
     Wilds._descEl.innerHTML = '';
@@ -1105,6 +1330,13 @@ var Wilds = {
     Wilds._descEl.appendChild(foodSpan);
     Wilds._descEl.appendChild(document.createTextNode(' \u2502 '));
     Wilds._descEl.appendChild(packSpan);
+
+    /* FIX 2: bandage count in status bar */
+    if (bandagesCarried > 0) {
+      var bandageSpan = document.createElement('span');
+      bandageSpan.textContent = ' \u2502 bandages: ' + bandagesCarried;
+      Wilds._descEl.appendChild(bandageSpan);
+    }
   },
 
   _buildActions: function() {
@@ -1119,7 +1351,8 @@ var Wilds = {
     var y    = $SM.get('game.player.y', true);
     var tile = Wilds._getTile(x, y);
 
-    var food       = $SM.get('stores.food', true);
+    var _bActCarry = $SM.get('game.carry') || {};
+    var food       = _bActCarry.food || 0; /* FIX 1: food from carry */
     var torches    = $SM.get('game.inventory.torchCharges', true) || 0;
     var hasLantern = !!$SM.get('game.inventory.markLantern');
     var wounded    = !!$SM.get('game.player.wounded');
@@ -1189,6 +1422,51 @@ var Wilds = {
       }
     }
 
+    /* FIX 2: use bandage — heals 25 HP; available any time in exploration */
+    var _bandCnt = (_bActCarry.bandages || 0);
+    var _curHp   = $SM.get('game.player.health', true) || 100;
+    if (_bandCnt > 0 && _curHp < 100) {
+      var bandBtn = document.createElement('button');
+      bandBtn.className   = 'action-btn visible';
+      bandBtn.textContent = 'use bandage (' + _bandCnt + ')';
+      bandBtn.addEventListener('click', function() {
+        var c = $SM.get('game.carry') || {};
+        if ((c.bandages || 0) <= 0) return;
+        c.bandages--;
+        $SM.set('game.carry', c, true);
+        var hp = $SM.get('game.player.health', true) || 0;
+        $SM.set('game.player.health', Math.min(100, hp + 25), true);
+        Wilds._addLog('bandage applied. ' + Math.min(100, hp + 25) + ' / 100.', 'timestamp');
+        Wilds._buildActions();
+        Wilds._renderCarry();
+      });
+      Wilds._actionsEl.appendChild(bandBtn);
+    }
+
+    /* FIX 2: place trap on current tile (not haven) */
+    var _trapsCnt  = (_bActCarry.traps || 0);
+    var _trapMap   = $SM.get('game.map.traps') || {};
+    var _tileKey   = Wilds._key(x, y);
+    if (_trapsCnt > 0 && !_trapMap[_tileKey] && tile !== 'haven') {
+      var trapBtn = document.createElement('button');
+      trapBtn.className   = 'action-btn visible';
+      trapBtn.textContent = 'place trap';
+      trapBtn.addEventListener('click', function() {
+        var c2 = $SM.get('game.carry') || {};
+        if ((c2.traps || 0) <= 0) return;
+        c2.traps--;
+        $SM.set('game.carry', c2, true);
+        var tm = $SM.get('game.map.traps') || {};
+        tm[Wilds._key(x, y)] = true;
+        $SM.set('game.map.traps', tm, true);
+        Wilds._addLog('trap set.', 'timestamp');
+        Wilds._renderMiniMap();
+        Wilds._buildActions();
+        Wilds._renderCarry();
+      });
+      Wilds._actionsEl.appendChild(trapBtn);
+    }
+
     /* Return to haven — always available (GDD §9) */
     var retBtn = document.createElement('button');
     retBtn.className   = 'action-btn visible';
@@ -1243,6 +1521,17 @@ var Wilds = {
     var carry = $SM.get('game.carry') || {};
     var cap   = $SM.get('game.buildings.storehouse') ? 100 : 50;
 
+    /* FIX 1: return inventory items (bandages/traps/poultice) to game.inventory */
+    var INV_ITEMS = ['bandages', 'traps', 'poultice'];
+    INV_ITEMS.forEach(function(item) {
+      if ((carry[item] || 0) > 0) {
+        var inv = $SM.get('game.inventory.' + item, true) || 0;
+        $SM.set('game.inventory.' + item, inv + carry[item], true);
+        delete carry[item];
+      }
+    });
+
+    /* Deposit remaining resources (including food) to stores */
     Object.keys(carry).forEach(function(r) {
       if ((carry[r] || 0) > 0) {
         if ($SM.get('stores.' + r) === undefined) $SM.set('stores.' + r, 0, true);
@@ -1256,6 +1545,9 @@ var Wilds = {
     $SM.set('game.player.wounded', false, true);
     $SM.set('game.player.x',       Wilds.START_X, true);
     $SM.set('game.player.y',       Wilds.START_Y, true);
+
+    /* FIX 1: expedition ends on return */
+    $SM.set('game.wilds.onExpedition', false, true);
 
     /* Final Overhaul §13: reset random-combat move counter on haven return */
     $SM.set('game.wilds.moveCounter', 0, true);
@@ -1527,6 +1819,9 @@ var Wilds = {
       haven:   'var(--nature-sage)'
     };
 
+    var trapsMap     = $SM.get('game.map.traps') || {};
+    var hasReinforced = !!$SM.get('game.inventory.hasReinforcedTorch');
+
     for (var row = 0; row < SIZE; row++) {
       for (var col = 0; col < SIZE; col++) {
         var wx   = px - VIEW + col;
@@ -1539,6 +1834,10 @@ var Wilds = {
           cell.style.color = 'var(--mark-amber)';
         } else if (wx < 0 || wx >= Wilds.MAP_W || wy < 0 || wy >= Wilds.MAP_H) {
           cell.textContent = ' ';
+        } else if (trapsMap[Wilds._key(wx, wy)] && Wilds._isExplored(wx, wy)) {
+          /* FIX 2: trapped tile marker */
+          cell.textContent = 't';
+          cell.style.color = 'var(--mark-amber)';
         } else if (Wilds._isExplored(wx, wy)) {
           var t = Wilds._getTile(wx, wy);
           cell.textContent = CHARS[t]  || '\u00b7';
@@ -1548,8 +1847,14 @@ var Wilds = {
           var adjToPlayer = (Math.abs(wx - px) + Math.abs(wy - py) === 1);
           var adjTile     = Wilds._getTile(wx, wy);
           if (adjToPlayer && adjTile !== 'sick') {
-            cell.textContent = '?';
-            cell.style.color = 'var(--mark-amber)';
+            /* FIX 2: reinforced torch reveals actual tile char */
+            if (hasReinforced) {
+              cell.textContent = CHARS[adjTile] || '?';
+              cell.style.color = COLORS[adjTile] || 'var(--mark-amber)';
+            } else {
+              cell.textContent = '?';
+              cell.style.color = 'var(--mark-amber)';
+            }
           } else {
             cell.textContent = ' ';
           }

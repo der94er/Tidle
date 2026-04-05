@@ -212,8 +212,10 @@ var Combat = {
   _lose: function() {
     $SM.set('game.combat.active',  false, true);
     $SM.remove('game.combat.enemyHp',    true);
-    $SM.set('game.player.wounded', true,  true);
-    $SM.set('game.carry',          {},    true); /* GDD §10: lose all carried resources */
+    $SM.set('game.player.wounded',   true,  true);
+    $SM.set('game.player.healAtDay', ($SM.get('game.day', true) || 0) + 2, true);
+    $SM.set('game.carry',            {},    true); /* GDD §10: lose all carried resources */
+    $SM.set('game.wilds.onExpedition', false, true); /* expedition ends on loss */
     $SM.set('playStats.combatLosses', ($SM.get('playStats.combatLosses') || 0) + 1, true);
 
     var dLine = Combat.DEFEAT_LINES[Math.floor(Math.random() * Combat.DEFEAT_LINES.length)];

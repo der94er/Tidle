@@ -110,6 +110,23 @@ var Haven = {
     mineShoreUp:  { resource: 'iron',  label: 'shore up the mine',    cost: { iron: 10, wood: 5 },  time: 30000, income: { stores: { iron:  1 }, delay: 60 }, msg: 'the mine holds. iron flows.' }
   },
 
+  /* FIX 3: villager resource requests — every 5 game-days */
+  VILLAGER_NEEDS: [
+    { resource: 'cloth', amount: 3, text: 'asks for cloth for warmer bedding.' },
+    { resource: 'herbs', amount: 3, text: 'asks for herbs. the cough is spreading.' },
+    { resource: 'iron',  amount: 2, text: '\u2019s tools are wearing thin. they need iron.' },
+    { resource: 'wood',  amount: 5, text: 'wants to patch their shelter. before the sickness gets in.' },
+    { resource: 'stone', amount: 3, text: 'asks for stone to shore up the wall.' }
+  ],
+
+  VILLAGER_DECLINE: {
+    fearful:   '\u2026i understand.',
+    practical: 'fine. i\u2019ll manage.',
+    curious:   'worth asking, i suppose.',
+    spiritual: 'the mark provides.',
+    quiet:     null /* quiet: just a nod */
+  },
+
   /* --- Module lifecycle --- */
 
   init: function() {
@@ -256,6 +273,23 @@ var Haven = {
 
     /* Final Overhaul §14: resource drain events */
     Haven._checkResourceDrain();
+
+    /* FIX 3: haven upkeep, villager needs, morale expiry */
+    Haven._checkHavenUpkeep();
+    Haven._checkVillagerNeeds();
+    Haven._checkMoraleExpiry();
+
+    /* FIX 2: natural wound healing after 2 game-days */
+    if ($SM.get('game.player.wounded')) {
+      var healAtDay = $SM.get('game.player.healAtDay') || 0;
+      var curDay2   = $SM.get('game.day', true) || 0;
+      if (curDay2 >= healAtDay) {
+        $SM.set('game.player.wounded', false, true);
+        $SM.remove('game.player.healAtDay', true);
+        Haven._addLog('the wound heals. slowly. but it heals.');
+        Haven._buildButtons();
+      }
+    }
 
     $SM.fireUpdate('stores', true);
 
@@ -771,6 +805,8 @@ var Haven = {
       var roles = ['idle', 'woodcutter', 'stonecutter', 'miner', 'hunter', 'guard'];
       /* GDD §8: herbalist requires herbalist hut */
       if ($SM.get('game.buildings.herbalistHut')) roles.push('herbalist');
+      /* FIX: weaver requires trading post */
+      if ($SM.get('game.buildings.tradingPost')) roles.push('weaver');
 
       roles.forEach(function(role) {
         var btn = document.createElement('button');
@@ -778,7 +814,7 @@ var Haven = {
         /* Abbreviated labels to fit the column */
         var labels = {
           idle: 'idle', woodcutter: 'wood', stonecutter: 'stone',
-          miner: 'mine', hunter: 'hunt', guard: 'guard', herbalist: 'herb'
+          miner: 'mine', hunter: 'hunt', guard: 'guard', herbalist: 'herb', weaver: 'weave'
         };
         btn.textContent = labels[role] || role;
         if (v.assignment === role) btn.classList.add('active');
@@ -813,7 +849,8 @@ var Haven = {
       stonecutter: { stores: { stone: 1 }, delay: 20 },
       miner:       { stores: { iron:  1 }, delay: 30 },
       hunter:      { stores: { food:  1 }, delay: 15 },
-      herbalist:   { stores: { herbs: 1 }, delay: 30 }
+      herbalist:   { stores: { herbs: 1 }, delay: 30 },
+      weaver:      { stores: { cloth: 1 }, delay: 30 } /* FIX: requires tradingPost */
     };
     var entry = rates[role];
     if (!entry) return; /* idle, guard — no production */
@@ -822,6 +859,8 @@ var Haven = {
     for (var r in entry.stores) {
       if ($SM.get('stores.' + r) === undefined) $SM.set('stores.' + r, 0, true);
     }
+    /* Ensure cloth store exists for weaver */
+    if (role === 'weaver' && $SM.get('stores.cloth') === undefined) $SM.set('stores.cloth', 0, true);
 
     $SM.setIncome('vlg' + idx, { stores: entry.stores, delay: entry.delay });
   },
@@ -918,6 +957,8 @@ var Haven = {
       var curMaxCharges     = $SM.get('game.inventory.torchMaxCharges', true) || 0;
       $SM.set('game.inventory.torchCharges',    curCharges    + totalNew, true);
       $SM.set('game.inventory.torchMaxCharges', curMaxCharges + totalNew, true);
+      /* FIX 2: flag that player has ever crafted reinforced torch (reveals adj tile chars) */
+      if (recipe.id === 'reinforcedTorch') $SM.set('game.inventory.hasReinforcedTorch', true, true);
       Haven._addLog(recipe.label + ' crafted.');
       Haven._buildCraftingButtons();
       $SM.fireUpdate('stores', true);
@@ -972,6 +1013,29 @@ var Haven = {
       var built = $SM.get('game.autoStructures.' + key + '.built');
       if (shown && !built) Haven._makeAutoStructureButton(key, Haven.AUTO_STRUCTURES[key]);
     });
+    /* FIX 2: use poultice when wounded */
+    if ($SM.get('game.player.wounded')) {
+      var poulticeInv = $SM.get('game.inventory.poultice', true) || 0;
+      if (poulticeInv > 0) {
+        var pBtn = document.createElement('button');
+        pBtn.className   = 'action-btn visible';
+        pBtn.textContent = 'use poultice';
+        pBtn.addEventListener('click', function() {
+          if (($SM.get('game.inventory.poultice', true) || 0) <= 0) return;
+          $SM.add('game.inventory.poultice', -1, true);
+          $SM.set('game.player.wounded', false, true);
+          $SM.remove('game.player.healAtDay', true);
+          Haven._addLog('the poultice draws out the infection. the wound closes.');
+          Haven._buildButtons();
+        });
+        Haven._actionsEl.appendChild(pBtn);
+      }
+    }
+
+    /* FIX 3: villager need choice buttons */
+    var vneed = $SM.get('game.villagerNeed');
+    if (vneed && vneed.active) Haven._renderVillagerNeedButtons(vneed);
+
     if (typeof Events !== 'undefined') Events._injectHavenButtons();
   },
 
@@ -1125,6 +1189,144 @@ var Haven = {
     var text = DRAIN_TEXTS[Math.floor(Math.random() * DRAIN_TEXTS.length)];
     Haven._addLog(text);
     Haven._addLog(drain + ' ' + r + ' lost.', 'timestamp');
+  },
+
+  /* FIX 3: haven upkeep — passive resource drain once enough buildings exist */
+  _checkHavenUpkeep: function() {
+    var BKEYS  = ['hearth','forge','hut','lodge','storehouse','workshop','watchtower','herbalistHut','tradingPost'];
+    var bCount = 0;
+    BKEYS.forEach(function(k) { if ($SM.get('game.buildings.' + k)) bCount++; });
+
+    if (bCount >= 5) {
+      if (($SM.get('stores.wood', true) || 0) > 0) {
+        $SM.add('stores.wood', -1, true);
+      } else {
+        Haven._addLog('the walls are cracking. wood is needed.', 'timestamp');
+      }
+    }
+    if (bCount >= 7) {
+      if (($SM.get('stores.stone', true) || 0) > 0) {
+        $SM.add('stores.stone', -1, true);
+      } else {
+        Haven._addLog('the walls are cracking. stone is needed.', 'timestamp');
+      }
+    }
+    if (bCount >= 8) {
+      if (($SM.get('stores.iron', true) || 0) > 0) {
+        $SM.add('stores.iron', -1, true);
+      } else {
+        Haven._addLog('the tools are wearing thin. iron is needed.', 'timestamp');
+      }
+    }
+  },
+
+  /* FIX 3: villager needs — check every 5 game-days */
+  _checkVillagerNeeds: function() {
+    var day = $SM.get('game.day', true) || 0;
+    if (day > 0 && day % 5 === 0 && !$SM.get('game.villagerNeed.active')) {
+      Haven._triggerVillagerNeed();
+    }
+  },
+
+  _triggerVillagerNeed: function() {
+    var pop = $SM.get('game.population') || [];
+    if (!pop.length) return;
+    var needDef = Haven.VILLAGER_NEEDS[Math.floor(Math.random() * Haven.VILLAGER_NEEDS.length)];
+    var v       = pop[Math.floor(Math.random() * pop.length)];
+    var vName   = v.name.toLowerCase();
+
+    /* iron request uses possessive prefix */
+    var logText = (needDef.resource === 'iron')
+      ? vName + needDef.text
+      : vName + ' ' + needDef.text;
+
+    $SM.set('game.villagerNeed', {
+      active:   true,
+      idx:      pop.indexOf(v),
+      name:     v.name,
+      trait:    v.trait,
+      resource: needDef.resource,
+      amount:   needDef.amount
+    }, true);
+
+    Haven._addLog(logText);
+    if (Engine.activeModule === Haven) Haven._buildButtons();
+  },
+
+  _renderVillagerNeedButtons: function(vneed) {
+    var resource  = vneed.resource;
+    var amount    = vneed.amount;
+    var canGive   = ($SM.get('stores.' + resource, true) || 0) >= amount;
+
+    var giveBtn = document.createElement('button');
+    giveBtn.className   = 'action-btn visible';
+    giveBtn.textContent = 'give ' + amount + ' ' + resource;
+    giveBtn.disabled    = !canGive;
+    giveBtn.addEventListener('click', function() {
+      if (($SM.get('stores.' + resource, true) || 0) < amount) return;
+      $SM.add('stores.' + resource, -amount, true);
+      $SM.set('game.villagerNeed.active', false, true);
+      Haven._addLog(vneed.name.toLowerCase() + ' thanks you.', 'timestamp');
+      Haven._grantMoraleBoost(vneed.idx, resource);
+      Haven._buildButtons();
+    });
+    Haven._actionsEl.appendChild(giveBtn);
+
+    var notNowBtn = document.createElement('button');
+    notNowBtn.className   = 'action-btn visible';
+    notNowBtn.textContent = 'not now';
+    notNowBtn.addEventListener('click', function() {
+      $SM.set('game.villagerNeed.active', false, true);
+      var declineText = Haven.VILLAGER_DECLINE[vneed.trait];
+      if (declineText) {
+        Haven._addLog(vneed.name.toLowerCase() + ': \u2018' + declineText + '\u2019', 'timestamp');
+      } else {
+        Haven._addLog(vneed.name.toLowerCase() + ' nods. says nothing.', 'timestamp');
+      }
+      Haven._buildButtons();
+    });
+    Haven._actionsEl.appendChild(notNowBtn);
+  },
+
+  /* FIX 3: morale boost — extra income stream for 5 game-days (+25%) */
+  _grantMoraleBoost: function(idx, resource) {
+    var pop = $SM.get('game.population') || [];
+    var v   = pop[idx];
+    if (!v || !v.assignment || v.assignment === 'idle' || v.assignment === 'guard') return;
+
+    var delays = { woodcutter: 20, stonecutter: 20, miner: 30, hunter: 15, herbalist: 30, weaver: 30 };
+    var resMap  = { woodcutter: 'wood', stonecutter: 'stone', miner: 'iron', hunter: 'food', herbalist: 'herbs', weaver: 'cloth' };
+    var delay   = delays[v.assignment];
+    var prodRes = resMap[v.assignment];
+    if (!delay || !prodRes) return;
+
+    /* Extra income: 1 unit per 4× base delay = 25% more production */
+    var moraleKey    = 'morale' + idx;
+    var moraleIncome = { stores: {}, delay: delay * 4 };
+    moraleIncome.stores[prodRes] = 1;
+    $SM.setIncome(moraleKey, moraleIncome);
+
+    var expiryDay    = ($SM.get('game.day', true) || 0) + 5;
+    var moraleExpiry = $SM.get('game.moraleExpiry') || {};
+    moraleExpiry[idx] = { key: moraleKey, expiryDay: expiryDay };
+    $SM.set('game.moraleExpiry', moraleExpiry, true);
+  },
+
+  /* FIX 3: remove morale boost after 5 game-days */
+  _checkMoraleExpiry: function() {
+    var curDay      = $SM.get('game.day', true) || 0;
+    var moraleExpiry = $SM.get('game.moraleExpiry') || {};
+    var changed     = false;
+    Object.keys(moraleExpiry).forEach(function(idx) {
+      var entry = moraleExpiry[idx];
+      if (curDay >= entry.expiryDay) {
+        var iKey = 'income["' + entry.key + '"]';
+        if ($SM.get(iKey) !== undefined) $SM.remove(iKey, true);
+        delete moraleExpiry[idx];
+        changed = true;
+      }
+    });
+    if (changed) $SM.set('game.moraleExpiry', moraleExpiry, true);
   },
 
   /* GDD §12: stoke costs 1 wood, raises fire +1 level (max 5) */

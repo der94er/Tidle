@@ -1367,3 +1367,125 @@ When stores overflow, the land reclaims what isn't used.
 - "the wood near the edge of the green has rotted. the sickness got to it."
 
 Log also prints: "[amount] [resource] lost."
+
+### §23 Expedition Loadout Screen (FIX 1)
+
+Before entering the wilds, a loadout UI is shown (gated by `game.wilds.onExpedition === false`).
+
+**Equipment section (read-only):** Shows currently equipped weapon, armor, and light source.
+
+**Supplies section (adjustable +/− buttons):**
+| Item | Source | Default | Max |
+|------|--------|---------|-----|
+| food | stores.food | min(10, stock) | pack space |
+| bandages | game.inventory.bandages | 0 | pack space |
+| traps | game.inventory.traps | 0 | pack space |
+| poultice | game.inventory.poultice | 0 | pack space |
+
+**Pack counter:** `X / 20` (or `X / 30` with companion). Each supply unit costs 1 slot.
+
+**Buttons:**
+- `[set out]` — deducts supplies from stores/inventory → `game.carry`; sets `game.wilds.onExpedition = true`; enters wilds
+- `[stay]` — returns to haven tab without change
+
+**On expedition return:** `carry.bandages`, `carry.traps`, `carry.poultice` → `game.inventory.X`; `carry.food` + gathered resources → `stores`; `onExpedition` set to false.
+
+**Food consumption:** 1 food from `game.carry.food` per move (not from `stores.food`). If carry food reaches 0, movement is blocked.
+
+---
+
+### §23.1 Item Functionality (FIX 2)
+
+#### Bandages
+- `[use bandage]` button visible during exploration when `carry.bandages > 0`
+- Effect: +25 HP (capped at max), −1 `carry.bandages`
+
+#### Traps
+- `[place trap]` button visible during exploration when `carry.traps > 0`
+- Records `game.map.traps["x,y"] = true`; −1 `carry.traps`
+- Minimap: trapped explored tiles display `'t'` in amber (`#D4740A`)
+- Auto-kill: if §22.13 random combat triggers on a trapped tile and enemy is blighted fox or root crawler → enemy killed instantly (no combat UI), trap removed, +1 combat win, no loot
+- Sickness shades are NOT auto-killed by traps
+
+#### Poultice
+- `[use poultice]` button visible in haven when `game.player.wounded === true` AND `game.inventory.poultice > 0`
+- Effect: −1 poultice, begins natural heal; `game.player.healAtDay` set to `game.day + 2`
+- Without poultice: player must wait 2 game-days naturally to heal
+
+#### Reinforced Torch
+- Provides 40 light charges (vs standard 20)
+- When crafted: sets `game.inventory.hasReinforcedTorch = true`
+- Minimap effect: adjacent unvisited non-sick tiles reveal their actual character and color (rather than `'?'`). Tiles with sickness still show `'?'`
+
+#### Mark Lantern
+- Sanctum room 5 check already in codebase; grants permanent light
+
+---
+
+### §23.2 Resource Sinks (FIX 3)
+
+#### Haven Upkeep
+Ongoing resource cost scales with settlement size:
+
+| Buildings built | Daily cost |
+|----------------|-----------|
+| ≥ 5 | −1 wood / day |
+| ≥ 7 | −1 stone / day |
+| ≥ 8 | −1 iron / day |
+
+If the required resource is at 0, a warning is logged instead of deducting. Buildings counted: hearth, forge, hut, lodge, storehouse, workshop, watchtower, herbalistHut, tradingPost.
+
+#### Villager Needs
+Every 5 game-days, a random villager makes a resource request (only when `!game.villagerNeed.active`).
+
+**Need table:**
+| Resource | Amount | Text |
+|----------|--------|------|
+| cloth | 3 | "asks for cloth for warmer bedding." |
+| herbs | 3 | "asks for herbs. the cough is spreading." |
+| iron | 2 | "'s tools are wearing thin. they need iron." |
+| wood | 5 | "wants to patch their shelter. before the sickness gets in." |
+| stone | 3 | "asks for stone to shore up the wall." |
+
+**Buttons:** `[give N resource]` / `[not now]`
+
+**Decline text by trait:**
+- fearful: "…i understand."
+- practical: "fine. i'll manage."
+- curious: "worth asking, i suppose."
+- spiritual: "the mark provides."
+- quiet: (silent)
+
+**Morale boost on give:** 5 game-days of +25% production from that villager's role. Implemented as an extra income stream at 4× base delay. Cleaned up by `_checkMoraleExpiry()` each game-day tick.
+
+**State:** `game.villagerNeed = { active, idx, name, trait, resource, amount }`; `game.moraleExpiry = { idx: { key, expiryDay } }`
+
+#### Fog Corrosion
+Pushing through a fog hazard (`[push through]` option) corrodes iron from carry: −1 `carry.iron`.
+
+#### Trading Post Inventory Trades (new entries)
+Four new trades added to the trade table, routing outcome to `game.inventory` via `invOffer: true` flag:
+
+| Offer | Cost | invOffer |
+|-------|------|---------|
+| 1 poultice | 5 herbs + 2 cloth | true |
+| 3 bandages | 3 cloth + 2 herbs | true |
+| 5 torches | 5 wood + 3 cloth + 5 iron | true |
+| 1 trap | 8 iron + 3 wood | true |
+
+Torches add to `torchCharges` pool (20 charges each).
+
+---
+
+### §23.3 Weaver Role
+
+Unlocked when trading post is built.
+
+| Property | Value |
+|----------|-------|
+| Produces | 1 cloth per 30s |
+| Button label | weave |
+| Unlock condition | tradingPost built |
+| Role index | 7th role (after hunter) |
+
+Total roles: 7 (woodcutter, stone-carver, herbalist, iron-finder, healer, hunter, weaver).
