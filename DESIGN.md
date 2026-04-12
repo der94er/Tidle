@@ -1586,8 +1586,8 @@ Each weapon and armor has a durability counter. One combat encounter uses 1 dura
 | crude sword | 5 |
 | steel sword | 10 |
 | warden's blade | 15 |
-| leather armor | 8 |
-| iron armor | 12 |
+| crude armor | 5 |
+| steel armor | 10 |
 | warden's coat | 18 |
 
 - At 0 durability: item shatters. Removed from character state. Message: "your [item] shatters."

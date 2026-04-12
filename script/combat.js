@@ -34,8 +34,8 @@ var Combat = {
   ITEM_DURABILITY: {
     crudeSword:  5,
     steelSword:  10,
-    crudeArmor:  8,
-    steelArmor:  12
+    crudeArmor:  5,
+    steelArmor:  10
   },
 
   /* Return the active weapon inv-key, or null */

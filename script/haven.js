@@ -1000,7 +1000,7 @@ var Haven = {
       /* Weapons/armor: equipping replaces old (GDD §7) */
       $SM.set(invKey, true, true);
       /* §24.10: set initial durability on weapon/armor craft */
-      var durMap = { crudeSword: 5, steelSword: 10, crudeArmor: 8, steelArmor: 12 };
+      var durMap = { crudeSword: 5, steelSword: 10, crudeArmor: 5, steelArmor: 10 };
       if (durMap[recipe.inv] !== undefined) {
         if (recipe.inv === 'crudeSword' || recipe.inv === 'steelSword') {
           $SM.set('game.player.weaponDurability', durMap[recipe.inv], true);
