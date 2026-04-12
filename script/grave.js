@@ -168,16 +168,18 @@ var Grave = {
   /* Phase 1 complete — atmospheric grave view for return visits */
   _showPhase2: function() {
     var level    = $SM.get('game.fire.level', true);
-    var markText = (level >= 2) ? 'the mark burns steady.' : 'the mark flickers.';
+    var markText = (level <= 1) ? 'the mark flickers.' : 'the mark burns. steady.';
 
-    var statusEl = document.createElement('div');
-    statusEl.className   = 'grave-mark-status';
-    statusEl.textContent = markText;
-    Grave._logEl.appendChild(statusEl);
-
-    var ember = document.createElement('div');
-    ember.className = 'grave-ember';
-    Grave._logEl.appendChild(ember);
+    /* §13: pulsing amber dot */
+    var dotRow = document.createElement('div');
+    dotRow.className = 'narrative visible';
+    var dot = document.createElement('span');
+    dot.className = 'grave-pulse-dot';
+    var markSpan = document.createElement('span');
+    markSpan.textContent = markText;
+    dotRow.appendChild(dot);
+    dotRow.appendChild(markSpan);
+    Grave._logEl.appendChild(dotRow);
 
     var txt = document.createElement('div');
     txt.className   = 'narrative visible';

@@ -10,19 +10,49 @@ var Events = {
   _wasNight: false,
   _lastDay:  0,
 
-  /* GDD §14 — trader goods table (6 store trades + 4 item trades from FIX 3) */
-  TRADE_TABLE: [
-    { offer: { cloth: 5 },           want: { iron: 5 },                            rare: false },
-    { offer: { herbs: 5 },           want: { wood: 5 },                            rare: false },
-    { offer: { iron: 3 },            want: { stone: 5 },                           rare: false },
-    { offer: { markFragments: 1 },   want: { iron: 20, cloth: 10 },                rare: true  },
-    { offer: { food: 10 },           want: { herbs: 5 },                           rare: false },
-    { offer: { cloth: 3, herbs: 3 }, want: { stone: 10 },                          rare: false },
-    /* FIX 3: item trades (invOffer: true — outcome goes to game.inventory) */
-    { offer: { poultice: 1 },        want: { herbs: 5, cloth: 2 },                 rare: false, invOffer: true },
-    { offer: { bandages: 3 },        want: { cloth: 3, herbs: 2 },                 rare: false, invOffer: true },
-    { offer: { torches: 5 },         want: { wood: 5, cloth: 3, iron: 5 },         rare: false, invOffer: true },
-    { offer: { traps: 1 },           want: { iron: 8, wood: 3 },                   rare: false, invOffer: true }
+  /* Section 24: Trading post — dynamic pricing (most abundant → least abundant, 3:1 rate).
+     UNIQUE_ITEMS: 25% chance trader carries one. One-time purchases only. */
+  STORE_RESOURCES: ['wood', 'stone', 'iron', 'cloth', 'herbs', 'food'],
+
+  UNIQUE_ITEMS: [
+    {
+      id:       'travelerMap',
+      label:    'a traveler\'s map',
+      resource: 'wood',
+      cost:     70,
+      desc:     'reveals 3 undiscovered tiles.',
+      effect:   '_applyTravelerMap'
+    },
+    {
+      id:       'oldMedicine',
+      label:    'old medicine',
+      resource: 'herbs',
+      cost:     65,
+      desc:     'heals wounds and grants +10 max health.',
+      effect:   '_applyOldMedicine'
+    },
+    {
+      id:       'wardenPage',
+      label:    'warden\'s journal page',
+      resource: 'stone',
+      cost:     75,
+      desc:     'a fragment of history.',
+      effect:   '_applyWardenPage'
+    },
+    {
+      id:       'reinforcedPack',
+      label:    'reinforced pack',
+      resource: 'iron',
+      cost:     80,
+      desc:     'increases pack capacity by 5.',
+      effect:   '_applyReinforcedPack'
+    }
+  ],
+
+  WARDEN_PAGE_TEXTS: [
+    'the page reads: \u2018the forty-third bearer lasted longest. she sang to the mark. it sang back.\u2019',
+    'the page reads: \u2018never go to the sanctum alone. the darkness there has weight.\u2019',
+    'the page reads: \u2018the land remembers everyone who bore the mark. even after they forget themselves.\u2019'
   ],
 
   /* GDD §3 Phase 3 — ambient flavor events (non-mechanical) */
@@ -132,11 +162,15 @@ var Events = {
       roll = Math.max(1, roll - guards * 10);
     }
 
+    /* §17: if player is in wilds, send deterioration message for any attack */
+    var attackOccurred = false;
+
     if (roll <= 50) {
       return; /* nothing happens */
 
     } else if (roll <= 75) {
       /* 51-75: lose 2-5 food */
+      attackOccurred = true;
       var fLoss = 2 + Math.floor(Math.random() * 4);
       var food  = $SM.get('stores.food', true);
       var fTake = Math.min(fLoss, food);
@@ -145,11 +179,13 @@ var Events = {
         Events._addHavenLog('creatures raid the stores. ' + fTake + ' food taken.');
       } else {
         Events._addHavenLog('something moves in the dark. the mark holds it back.');
+        attackOccurred = false;
       }
       $SM.fireUpdate('stores', true);
 
     } else if (roll <= 90) {
       /* 76-90: lose 1-3 wood */
+      attackOccurred = true;
       var wLoss = 1 + Math.floor(Math.random() * 3);
       var wood  = $SM.get('stores.wood', true);
       var wTake = Math.min(wLoss, wood);
@@ -158,11 +194,13 @@ var Events = {
         Events._addHavenLog('blighted animals gnaw at the woodpile. ' + wTake + ' wood lost.');
       } else {
         Events._addHavenLog('blighted animals at the edge. nothing to take. they leave.');
+        attackOccurred = false;
       }
       $SM.fireUpdate('stores', true);
 
     } else {
       /* 91-100: 1 villager killed (last-arrived, consistent with food-loss removal) */
+      attackOccurred = true;
       pop = $SM.get('game.population') || [];
       if (pop.length > 0) {
         var last   = pop.length - 1;
@@ -177,6 +215,11 @@ var Events = {
         $SM.fireUpdate('game', true);
       }
     }
+
+    /* §17: wilds log message when attack happens while player is exploring */
+    if (attackOccurred && typeof Wilds !== 'undefined' && Engine.activeModule === Wilds) {
+      Wilds._addLog('unease. something happened at the haven.', 'timestamp');
+    }
   },
 
   /* Final Overhaul §3 Event 2: scripted first night attack */
@@ -190,21 +233,27 @@ var Events = {
     if (fTake > 0) $SM.add('stores.food', -fTake, true);
     Haven._addLog('the sickness has teeth.', 'timestamp');
     $SM.fireUpdate('stores', true);
+    /* §9: pulse the watchtower build button */
+    Engine.setTimeout(function() {
+      if (typeof Haven !== 'undefined') Haven._pulseBuildBtn('watchtower');
+    }, 1500);
   },
 
   /* ----------------------------------------------------------------
-     Trader (GDD §14: every 5-8 game-days if trading post built)
+     Section 24: Trader (every 5 game-days if trading post built; stays 1 day)
+     Dynamic pricing: 3 of most-abundant → 1 of least-abundant.
+     25% chance of unique item.
   ---------------------------------------------------------------- */
 
   _traderCheck: function() {
     if (!$SM.get('game.buildings.tradingPost')) return;
     if ($SM.get('game.trader.active')) return;
 
-    var day      = $SM.get('game.day', true) || 0;
-    var lastDay  = $SM.get('game.trader.lastDay') || 0;
-    var interval = 5 + Math.floor(Math.random() * 4); /* 5, 6, 7, or 8 */
+    var day     = $SM.get('game.day', true) || 0;
+    var lastDay = $SM.get('game.trader.lastDay') || 0;
 
-    if (lastDay === 0 || (day - lastDay) >= interval) {
+    /* Section 24: arrives exactly every 5 game-days */
+    if (lastDay === 0 || (day - lastDay) >= 5) {
       Events._traderArrive();
     }
   },
@@ -215,19 +264,52 @@ var Events = {
     $SM.set('game.trader.lastDay',   day,     true);
     $SM.set('game.trader.expiryDay', day + 1, true);
 
-    /* GDD §14: 10% chance of rare (mark fragment) trade */
-    var isRare = Math.random() < 0.1;
-    var pool   = Events.TRADE_TABLE.filter(function(t) { return t.rare === isRare; });
-    if (pool.length === 0) pool = Events.TRADE_TABLE.filter(function(t) { return !t.rare; });
-    var trade  = pool[Math.floor(Math.random() * pool.length)];
-    $SM.set('game.trader.offer', trade, true);
+    /* Section 24: dynamic pricing — most abundant to least abundant, 3:1 */
+    var RESOURCES = Events.STORE_RESOURCES;
+    var amounts   = {};
+    RESOURCES.forEach(function(r) { amounts[r] = $SM.get('stores.' + r, true) || 0; });
 
-    /* GDD §3 Phase 3 exact opening line */
+    var sorted     = RESOURCES.slice().sort(function(a, b) { return amounts[b] - amounts[a]; });
+    var sellRes    = sorted[0]; /* most abundant — trader buys this */
+    var buyRes     = sorted[sorted.length - 1]; /* least abundant — trader sells this */
+
+    /* Fallback: if all equal, pick wood to sell and food to buy */
+    if (sellRes === buyRes) { sellRes = 'wood'; buyRes = 'food'; }
+
+    var tradeQty = 3; /* player gives 3, gets 1 */
+    var trade = {
+      want:    {},
+      offer:   {}
+    };
+    trade.want[sellRes] = tradeQty;
+    trade.offer[buyRes] = 1;
+    $SM.set('game.trader.trade', trade, true);
+
+    /* Section 24: 25% chance of unique item */
+    var uniqueItem = null;
+    if (Math.random() < 0.25) {
+      var available = Events.UNIQUE_ITEMS.filter(function(u) {
+        return !$SM.get('game.trader.bought.' + u.id);
+      });
+      if (available.length > 0) {
+        uniqueItem = available[Math.floor(Math.random() * available.length)];
+        $SM.set('game.trader.uniqueItem', uniqueItem.id, true);
+      }
+    } else {
+      $SM.remove('game.trader.uniqueItem', true);
+    }
+
     Events._addHavenLog('a trader arrives. she traveled the dead roads.');
     Events._addHavenLog(
-      'she offers ' + Events._resStr(trade.offer) + ' for ' + Events._resStr(trade.want) + '.',
+      'she\'ll trade ' + buyRes + ' for your ' + sellRes + '. three to one.',
       'timestamp'
     );
+    if (uniqueItem) {
+      Events._addHavenLog(
+        'she also carries ' + uniqueItem.label + '. ' + uniqueItem.desc,
+        'timestamp'
+      );
+    }
 
     if (Engine.activeModule === Haven) Events._renderTraderButton();
   },
@@ -240,29 +322,50 @@ var Events = {
   },
 
   _traderLeave: function(msg) {
-    $SM.remove('game.trader.active',    true);
-    $SM.remove('game.trader.offer',     true);
-    $SM.remove('game.trader.expiryDay', true);
+    $SM.remove('game.trader.active',     true);
+    $SM.remove('game.trader.trade',      true);
+    $SM.remove('game.trader.uniqueItem', true);
+    $SM.remove('game.trader.expiryDay',  true);
     Events._clearTraderBtn();
     if (msg) Events._addHavenLog(msg, 'timestamp');
   },
 
-  /* Renders the trade button into Haven._actionsEl */
+  /* Renders the trade button(s) into Haven._actionsEl */
   _renderTraderButton: function() {
     if (!Haven._actionsEl) return;
     Events._clearTraderBtn();
 
-    var trade = $SM.get('game.trader.offer');
+    var trade = $SM.get('game.trader.trade');
     if (!trade) return;
+
+    /* Dynamic trade button */
+    var sellRes = Object.keys(trade.want)[0];
+    var buyRes  = Object.keys(trade.offer)[0];
+    var haveEnough = ($SM.get('stores.' + sellRes, true) || 0) >= trade.want[sellRes];
 
     var btn = document.createElement('button');
     btn.id          = 'traderBtn';
     btn.className   = 'action-btn visible';
-    btn.textContent = 'trade (' + Events._resStr(trade.offer) + ' for ' + Events._resStr(trade.want) + ')';
-    btn.disabled    = !Events._canAffordTrade(trade.want);
-
+    btn.textContent = 'trade (give 3 ' + sellRes + ', receive 1 ' + buyRes + ')';
+    btn.disabled    = !haveEnough;
     btn.addEventListener('click', function() { Events._executeTrade(); });
     Haven._actionsEl.appendChild(btn);
+
+    /* Unique item button if available */
+    var uniqueId = $SM.get('game.trader.uniqueItem');
+    if (uniqueId) {
+      var uItem = Events.UNIQUE_ITEMS.filter(function(u) { return u.id === uniqueId; })[0];
+      if (uItem && !$SM.get('game.trader.bought.' + uItem.id)) {
+        var canAffordUnique = ($SM.get('stores.' + uItem.resource, true) || 0) >= uItem.cost;
+        var uBtn = document.createElement('button');
+        uBtn.id          = 'traderUniqueBtn';
+        uBtn.className   = 'action-btn visible';
+        uBtn.textContent = 'buy ' + uItem.label + ' (' + uItem.cost + ' ' + uItem.resource + ')';
+        uBtn.disabled    = !canAffordUnique;
+        uBtn.addEventListener('click', function() { Events._buyUniqueItem(uItem); });
+        Haven._actionsEl.appendChild(uBtn);
+      }
+    }
   },
 
   /* Hook called from Haven._buildButtons — injects any active event buttons */
@@ -271,65 +374,92 @@ var Events = {
   },
 
   _clearTraderBtn: function() {
-    var old = document.getElementById('traderBtn');
-    if (old && old.parentNode) old.parentNode.removeChild(old);
+    ['traderBtn', 'traderUniqueBtn'].forEach(function(id) {
+      var old = document.getElementById(id);
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+    });
   },
 
   _executeTrade: function() {
-    var trade = $SM.get('game.trader.offer');
+    var trade = $SM.get('game.trader.trade');
     if (!trade) return;
 
-    if (!Events._canAffordTrade(trade.want)) {
+    var sellRes = Object.keys(trade.want)[0];
+    var buyRes  = Object.keys(trade.offer)[0];
+    if (($SM.get('stores.' + sellRes, true) || 0) < trade.want[sellRes]) {
       Events._addHavenLog('not enough to trade.');
       return;
     }
 
-    var cap = $SM.get('game.buildings.storehouse') ? 100 : 50;
+    var cap = $SM.get('game.buildings.storehouse') ? Haven.STOREHOUSE_CAP : Haven.BASE_STORE_CAP;
 
-    /* Deduct what trader wants */
-    Object.keys(trade.want).forEach(function(r) {
-      var key = (r === 'markFragments') ? 'stores.markFragments' : 'stores.' + r;
-      $SM.add(key, -trade.want[r], true);
-    });
+    $SM.add('stores.' + sellRes, -trade.want[sellRes], true);
 
-    /* Add what trader offers */
-    if (trade.invOffer) {
-      /* FIX 3: inventory item trades */
-      Object.keys(trade.offer).forEach(function(item) {
-        if (item === 'torches') {
-          var newCh  = trade.offer[item] * 20;
-          var curCh  = $SM.get('game.inventory.torchCharges',    true) || 0;
-          var curMx  = $SM.get('game.inventory.torchMaxCharges', true) || 0;
-          $SM.set('game.inventory.torchCharges',    curCh + newCh, true);
-          $SM.set('game.inventory.torchMaxCharges', curMx + newCh, true);
-        } else {
-          var invKey = 'game.inventory.' + item;
-          var inv    = $SM.get(invKey, true) || 0;
-          $SM.set(invKey, inv + trade.offer[item], true);
-        }
-      });
-    } else {
-      /* Standard store resource trades (cap-aware) */
-      Object.keys(trade.offer).forEach(function(r) {
-        var key = (r === 'markFragments') ? 'stores.markFragments' : 'stores.' + r;
-        if ($SM.get(key) === undefined) $SM.set(key, 0, true);
-        var cur = $SM.get(key) || 0;
-        var add = Math.min(trade.offer[r], cap - cur);
-        if (add > 0) $SM.add(key, add, true);
-      });
-    }
+    if ($SM.get('stores.' + buyRes) === undefined) $SM.set('stores.' + buyRes, 0, true);
+    var cur = $SM.get('stores.' + buyRes, true) || 0;
+    var add = Math.min(trade.offer[buyRes], cap - cur);
+    if (add > 0) $SM.add('stores.' + buyRes, add, true);
 
     $SM.fireUpdate('stores', true);
-    Events._addHavenLog('traded. she nods and leaves.');
-    Events._traderLeave(null);
+    Events._addHavenLog('traded. she nods.');
+
+    /* Allow multiple trades until trader leaves */
+    if (Engine.activeModule === Haven) Events._renderTraderButton();
   },
 
-  _canAffordTrade: function(want) {
-    for (var r in want) {
-      var key = (r === 'markFragments') ? 'stores.markFragments' : 'stores.' + r;
-      if (($SM.get(key) || 0) < want[r]) return false;
+  _buyUniqueItem: function(uItem) {
+    if ($SM.get('game.trader.bought.' + uItem.id)) return;
+    if (($SM.get('stores.' + uItem.resource, true) || 0) < uItem.cost) {
+      Events._addHavenLog('not enough ' + uItem.resource + '.');
+      return;
     }
-    return true;
+    $SM.add('stores.' + uItem.resource, -uItem.cost, true);
+    $SM.set('game.trader.bought.' + uItem.id, true, true);
+    $SM.remove('game.trader.uniqueItem', true);
+    Events._addHavenLog('you buy ' + uItem.label + '.');
+    Events[uItem.effect]();
+    $SM.fireUpdate('stores', true);
+    if (Engine.activeModule === Haven) Events._renderTraderButton();
+  },
+
+  /* Section 24: unique item effects */
+  _applyTravelerMap: function() {
+    /* Reveal 3 random unexplored tiles on the map */
+    var revealed = 0;
+    var explored = $SM.get('game.map.explored') || {};
+    var attempts = 0;
+    while (revealed < 3 && attempts < 200) {
+      attempts++;
+      var rx = Math.floor(Math.random() * (Wilds ? Wilds.MAP_W : 12));
+      var ry = Math.floor(Math.random() * (Wilds ? Wilds.MAP_H : 12));
+      var rk = rx + ',' + ry;
+      if (!explored[rk]) {
+        explored[rk] = true;
+        revealed++;
+      }
+    }
+    $SM.set('game.map.explored', explored, true);
+    Events._addHavenLog('the map reveals distant paths.', 'timestamp');
+  },
+
+  _applyOldMedicine: function() {
+    $SM.set('game.player.wounded', false, true);
+    /* §24: +10 max HP for current exploration trip only; cleared on haven return */
+    $SM.set('game.player.bonusMaxHp', ($SM.get('game.player.bonusMaxHp') || 0) + 10, true);
+    $SM.set('game.player.medicineBonusActive', true, true);
+    Events._addHavenLog('the old medicine works. your wounds close. you feel stronger.', 'timestamp');
+  },
+
+  _applyWardenPage: function() {
+    var texts = Events.WARDEN_PAGE_TEXTS;
+    var text  = texts[Math.floor(Math.random() * texts.length)];
+    Events._addHavenLog(text, 'timestamp');
+  },
+
+  _applyReinforcedPack: function() {
+    var current = $SM.get('game.player.packBonus') || 0;
+    $SM.set('game.player.packBonus', current + 5, true);
+    Events._addHavenLog('the pack is sturdier. you can carry more.', 'timestamp');
   },
 
   _resStr: function(obj) {
@@ -372,6 +502,9 @@ var Events = {
 
   _addHavenLog: function(text, type) {
     if (!Haven._logEl) return;
+    /* §24.5: enforce 8-entry cap — remove oldest narrative when exceeded */
+    var entries = Haven._logEl.querySelectorAll('.narrative');
+    if (entries.length >= Haven.LOG_CAP) entries[0].remove();
     var el = document.createElement('div');
     el.className = 'narrative';
     if (type === 'timestamp') el.classList.add('timestamp');

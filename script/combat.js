@@ -30,6 +30,84 @@ var Combat = {
     'the mark flares. drags you home. you don\u2019t remember how.'
   ],
 
+  /* §24.10 — Durability: max values per item */
+  ITEM_DURABILITY: {
+    crudeSword:  5,
+    steelSword:  10,
+    crudeArmor:  8,
+    steelArmor:  12
+  },
+
+  /* Return the active weapon inv-key, or null */
+  _equippedWeapon: function() {
+    if ($SM.get('game.inventory.steelSword')) return 'steelSword';
+    if ($SM.get('game.inventory.crudeSword')) return 'crudeSword';
+    return null;
+  },
+
+  _equippedArmor: function() {
+    if ($SM.get('game.inventory.steelArmor')) return 'steelArmor';
+    if ($SM.get('game.inventory.crudeArmor')) return 'crudeArmor';
+    return null;
+  },
+
+  /* Decrement durability on weapon + armor; break at 0. Called once per combat. */
+  _wearEquipment: function() {
+    var weapon = Combat._equippedWeapon();
+    var armor  = Combat._equippedArmor();
+
+    if (weapon) {
+      var wMax = Combat.ITEM_DURABILITY[weapon] || 10;
+      var wCur = $SM.get('game.player.weaponDurability', true);
+      if (typeof wCur !== 'number') wCur = wMax; /* initialise if missing */
+      wCur = Math.max(0, wCur - 1);
+      $SM.set('game.player.weaponDurability', wCur, true);
+      if (wCur === 0) {
+        var wLabel = weapon === 'steelSword' ? 'steel sword' : 'crude sword';
+        $SM.remove('game.inventory.' + weapon, true);
+        $SM.remove('game.player.weaponDurability', true);
+        Engine.setTimeout(function() { Wilds._addLog('your ' + wLabel + ' shatters.', 'timestamp'); }, 600);
+      }
+    }
+
+    if (armor) {
+      var aMax = Combat.ITEM_DURABILITY[armor] || 8;
+      var aCur = $SM.get('game.player.armorDurability', true);
+      if (typeof aCur !== 'number') aCur = aMax;
+      aCur = Math.max(0, aCur - 1);
+      $SM.set('game.player.armorDurability', aCur, true);
+      if (aCur === 0) {
+        var aLabel = armor === 'steelArmor' ? 'steel armor' : 'crude armor';
+        $SM.remove('game.inventory.' + armor, true);
+        $SM.remove('game.player.armorDurability', true);
+        Engine.setTimeout(function() { Wilds._addLog('your ' + aLabel + ' shatters.', 'timestamp'); }, 900);
+      }
+    }
+  },
+
+  /* §24.10 — Label a weapon with its durability: "steel sword (7/10)" */
+  weaponLabel: function() {
+    var weapon = Combat._equippedWeapon();
+    if (!weapon) return null;
+    var label  = weapon === 'steelSword' ? 'steel sword' : 'crude sword';
+    var atk    = weapon === 'steelSword' ? 5 : 2;
+    var max    = Combat.ITEM_DURABILITY[weapon];
+    var cur    = $SM.get('game.player.weaponDurability', true);
+    if (typeof cur !== 'number') cur = max;
+    return label + ' (' + cur + '/' + max + ') \u2014 atk +' + atk;
+  },
+
+  armorLabel: function() {
+    var armor = Combat._equippedArmor();
+    if (!armor) return null;
+    var label  = armor === 'steelArmor' ? 'steel armor' : 'crude armor';
+    var def    = armor === 'steelArmor' ? 5 : 2;
+    var max    = Combat.ITEM_DURABILITY[armor];
+    var cur    = $SM.get('game.player.armorDurability', true);
+    if (typeof cur !== 'number') cur = max;
+    return label + ' (' + cur + '/' + max + ') \u2014 def +' + def;
+  },
+
   /* GDD §10 — player attack = base 0 + weapon bonus */
   _getPlayerAttack: function() {
     var base = 0;
@@ -110,7 +188,7 @@ var Combat = {
       Wilds._actionsEl.appendChild(fleeBtn);
     }
 
-    /* Section 9: mark's light — fox, crawler, shade only */
+    /* §22: mark's light — fox, crawler, shade only. Costs 5 torch charges (0 with mark lantern). */
     var eKey = Combat._enemy && Combat._enemy.key;
     if (eKey === 'fox' || eKey === 'crawler' || eKey === 'shade') {
       var torchCharges = $SM.get('game.inventory.torchCharges', true) || 0;
@@ -121,7 +199,7 @@ var Combat = {
       lightBtn.className   = 'action-btn visible';
       lightBtn.textContent = 'offer the mark\u2019s light';
       lightBtn.disabled    = !canLight;
-      if (!canLight) lightBtn.title = 'need 5 torch charges';
+      if (!canLight) lightBtn.title = 'need 5 torch charges (or mark lantern)';
       lightBtn.addEventListener('click', function() { Combat._doMarkLight(); });
       Wilds._actionsEl.appendChild(lightBtn);
     }
@@ -151,6 +229,9 @@ var Combat = {
     Wilds._actionsEl.innerHTML = '';
 
     Wilds._addLog('you deal ' + pDealt + '. the ' + e.name + ' deals ' + eDealt + '.');
+
+    /* §24.10: wear equipment each combat round */
+    Combat._wearEquipment();
 
     if (enemyHp <= 0 && playerHp <= 0) {
       /* Both down simultaneously — player survives (mark never fails, GDD §12) */
@@ -248,17 +329,17 @@ var Combat = {
     if (Combat._callback) Combat._callback(false);
   },
 
-  /* Section 9: mark's light data */
+  /* §22: mark's light data */
   MARK_LIGHT_LOOT: {
-    fox:     { resource: 'herbs',          min: 2, max: 4 },
-    crawler: { resource: 'wood',           min: 3, max: 5 },
-    shade:   { resource: 'markFragments',  min: 1, max: 1 }
+    fox:     { resource: 'herbs', min: 2, max: 4 },
+    crawler: { resource: 'wood',  min: 3, max: 5 }
+    /* shade: no resource reward */
   },
 
   MARK_LIGHT_TEXT: {
-    fox:     'you hold out your hand. the mark\u2019s light washes over the fox. its eyes clear. it stands still for a moment, then disappears into the brush.',
-    crawler: 'the roots recoil from the light, then soften. uncurl. sink back into the soil. where they settle, a shoot of green appears.',
-    shade:   'the light passes through the shade. it keens \u2014 high and thin \u2014 and then dissolves. where it stood, a shard of condensed mark-light remains.'
+    fox:     'the fox\u2019s eyes clear. it nuzzles the green before leaving.',
+    crawler: 'the roots settle back into the soil. a shoot of green appears.',
+    shade:   'the shade dissolves. where it stood, the air is clean.'
   },
 
   _doMarkLight: function() {

@@ -271,7 +271,9 @@ var Wilds = {
     var invPoultice = $SM.get('game.inventory.poultice',   true) || 0;
 
     var hasCompanion = !!$SM.get('game.companion.alive');
-    var packCap      = Wilds.MAX_CARRY + (hasCompanion ? 10 : 0);
+    /* Section 16/27: 20 base + 10 with companion + any pack bonus from trader */
+    var packBonus = $SM.get('game.player.packBonus') || 0;
+    var packCap   = Wilds.MAX_CARRY + (hasCompanion ? 10 : 0) + packBonus;
 
     /* Mutable pack choices */
     var choices = {
@@ -300,14 +302,16 @@ var Wilds = {
     eqHdr.textContent = 'equipment';
     screen.appendChild(eqHdr);
 
-    var weaponText = hasSteel   ? 'steel sword \u2014 atk +5'  :
-                     hasCrude   ? 'crude sword \u2014 atk +2'  : 'none \u2014 fists only';
-    var armorText  = hasSteelAr ? 'steel armor \u2014 def +5'  :
-                     hasCrudeAr ? 'crude armor \u2014 def +2'  : 'none';
-    var lightText  = hasLantern ? 'mark lantern' :
-                     torchCh > 0 ? 'torch \u2014 ' + torchCh + ' charges' : 'no light source!';
+    /* §24.10: show durability in loadout */
+    var weaponText = (hasSteel || hasCrude) ? (Combat.weaponLabel() || 'none \u2014 fists only') : 'none \u2014 fists only';
+    var armorText  = (hasSteelAr || hasCrudeAr) ? (Combat.armorLabel() || 'none') : 'none';
+    /* Section 23: torch is always the light source; lantern is a key item shown separately */
+    var lightText  = torchCh > 0 ? 'torch \u2014 ' + torchCh + ' charges' : 'no light!';
 
-    [['weapon', weaponText], ['armor', armorText], ['light', lightText]].forEach(function(pair) {
+    var eqPairs = [['weapon', weaponText], ['armor', armorText], ['light', lightText]];
+    if (hasLantern) eqPairs.push(['mark lantern', 'carried']);
+
+    eqPairs.forEach(function(pair) {
       var row = document.createElement('div');
       row.className = 'loadout-row';
       var lbl = document.createElement('span');
@@ -316,7 +320,8 @@ var Wilds = {
       var val = document.createElement('span');
       val.className   = 'loadout-item-value';
       val.textContent = pair[1];
-      if (pair[0] === 'light' && !hasLantern && torchCh <= 0) val.style.color = 'var(--sickness)';
+      if (pair[0] === 'light' && torchCh <= 0) val.style.color = 'var(--sickness)';
+      if (pair[0] === 'mark lantern') val.style.color = 'var(--mark-amber)';
       row.appendChild(lbl); row.appendChild(val);
       screen.appendChild(row);
     });
@@ -425,10 +430,13 @@ var Wilds = {
     $SM.set('game.carry', carry, true);
 
     /* Capture haven state for return summary */
+    var depResources = ['wood','stone','iron','cloth','herbs','food'];
+    var depTotal = depResources.reduce(function(sum, r) { return sum + ($SM.get('stores.' + r, true) || 0); }, 0);
     $SM.set('game.wildsDeparture', {
-      fireLevel: $SM.get('game.fire.level', true) || 0,
-      popCount:  ($SM.get('game.population') || []).length,
-      food:      $SM.get('stores.food', true) || 0
+      fireLevel:  $SM.get('game.fire.level', true) || 0,
+      popCount:   ($SM.get('game.population') || []).length,
+      food:       $SM.get('stores.food', true) || 0,
+      storeTotal: depTotal
     }, true);
 
     $SM.set('game.wilds.onExpedition', true, true);
@@ -526,10 +534,10 @@ var Wilds = {
       return;
     }
 
-    /* GDD §18: torch required for unexplored tiles */
-    var explored   = Wilds._isExplored(nx, ny);
-    var hasLantern = !!$SM.get('game.inventory.markLantern');
-    if (!explored && !hasLantern) {
+    /* Section 23: torch always required for unexplored tiles.
+       Mark lantern is a key item — it does NOT provide exploration light. */
+    var explored = Wilds._isExplored(nx, ny);
+    if (!explored) {
       var charges = $SM.get('game.inventory.torchCharges', true) || 0;
       if (charges < 1) {
         Wilds._addLog('no torch. cannot enter unexplored territory.');
@@ -774,15 +782,27 @@ var Wilds = {
         else if (_dist <= 6) _eKey = Math.random() < 0.5 ? 'fox' : 'crawler';
         else                 _eKey = Math.random() < 0.5 ? 'crawler' : 'shade';
 
-        /* FIX 2: check for trap — auto-kills fox and crawler */
+        /* Section 23: check for trap — gives distance-based loot, single use */
         var _trapMap13 = $SM.get('game.map.traps') || {};
         var _tKey13    = Wilds._key(x, y);
         if (_trapMap13[_tKey13] && (_eKey === 'fox' || _eKey === 'crawler')) {
           delete _trapMap13[_tKey13];
           $SM.set('game.map.traps', _trapMap13, true);
           $SM.set('playStats.combatWins', ($SM.get('playStats.combatWins') || 0) + 1, true);
-          Wilds._addLog('the trap springs. a ' + Wilds.ENEMIES[_eKey].name + ' caught. the remains dissolve.');
+          /* Loot based on distance: ≤3 tiles = cloth (fox zone), 4+ tiles = wood (crawler zone) */
+          var _trpRes = (_dist <= 3) ? 'cloth' : 'wood';
+          var _trpAmt = 3 + Math.floor(Math.random() * 3); /* 3-5 */
+          var _trpSpace = Wilds._getMaxCarry() - Wilds._getCarryTotal();
+          var _trpTake  = Math.min(_trpAmt, _trpSpace);
+          var _trpCarry = $SM.get('game.carry') || {};
+          if (_trpTake > 0) {
+            _trpCarry[_trpRes] = (_trpCarry[_trpRes] || 0) + _trpTake;
+            $SM.set('game.carry', _trpCarry, true);
+          }
+          Wilds._addLog('the trap holds a ' + Wilds.ENEMIES[_eKey].name + '. its remains are salvageable.');
+          if (_trpTake > 0) Wilds._addLog(_trpTake + ' ' + _trpRes + ' salvaged.', 'timestamp');
           Wilds._renderMiniMap();
+          Wilds._renderCarry();
           /* fall through to _buildActions */
         } else {
           Engine.setTimeout(function() { Wilds._triggerCombat(x, y, _eKey, 'random'); }, 600);
@@ -1028,11 +1048,13 @@ var Wilds = {
       Wilds._actionsEl.appendChild(btn);
     }
 
+    /* §19: fog costs 3 torch charges (0 with mark lantern) */
+    var hasLanternFog = !!$SM.get('game.inventory.markLantern');
     makeBtn(
-      hasLantern ? 'push through' : 'push through (3 torch charges)',
-      !hasLantern && torches < 3,
+      hasLanternFog ? 'push through (lantern lights the way)' : 'push through (3 torch charges)',
+      !hasLanternFog && torches < 3,
       function() {
-        if (!hasLantern) $SM.add('game.inventory.torchCharges', -3, true);
+        if (!hasLanternFog) $SM.add('game.inventory.torchCharges', -3, true);
         Wilds._setCleared(x, y);
         Wilds._addLog('you push through the fog. disoriented but unharmed.', 'timestamp');
         /* FIX 3: fog corrodes 1 iron from pack */
@@ -1160,11 +1182,12 @@ var Wilds = {
       Wilds._buildActions();
     });
 
+    /* Section 23: torch required regardless of lantern */
     makeBtn(
-      hasLantern ? 'burn through' : 'burn through (3 torch charges)',
-      !hasLantern && torches < 3,
+      'burn through (3 torch charges)',
+      torches < 3,
       function() {
-        if (!hasLantern) $SM.add('game.inventory.torchCharges', -3, true);
+        $SM.add('game.inventory.torchCharges', -3, true);
         Wilds._setCleared(x, y);
         Wilds._addLog('the thorns burn. the mark flares as they die.', 'timestamp');
         Wilds._buildActions();
@@ -1291,12 +1314,10 @@ var Wilds = {
 
     Wilds._descEl.innerHTML = '';
 
-    /* Torch segment */
+    /* Section 23: torch is always the light source; lantern shown separately as key item */
     var torchSpan = document.createElement('span');
-    if (hasLantern) {
-      torchSpan.textContent = 'mark lantern';
-    } else if (torchCharges <= 0 && torchMaxCharges <= 0) {
-      torchSpan.textContent = 'no torch.';
+    if (torchCharges <= 0 && torchMaxCharges <= 0) {
+      torchSpan.textContent = 'no torch. darkness ahead.';
       torchSpan.style.color = 'var(--sickness)';
     } else {
       var torchLabel = document.createTextNode('torch: ');
@@ -1331,11 +1352,36 @@ var Wilds = {
     Wilds._descEl.appendChild(document.createTextNode(' \u2502 '));
     Wilds._descEl.appendChild(packSpan);
 
-    /* FIX 2: bandage count in status bar */
     if (bandagesCarried > 0) {
       var bandageSpan = document.createElement('span');
-      bandageSpan.textContent = ' \u2502 bandages: ' + bandagesCarried;
+      var bNum = document.createElement('span');
+      bNum.textContent = bandagesCarried;
+      if (bandagesCarried <= 3) bNum.style.color = 'var(--sickness)';
+      bandageSpan.appendChild(document.createTextNode(' \u2502 bandages: '));
+      bandageSpan.appendChild(bNum);
       Wilds._descEl.appendChild(bandageSpan);
+    }
+
+    /* Section 23: show mark lantern as a separate key item (not a light source) */
+    if (hasLantern) {
+      var lanternSpan = document.createElement('span');
+      lanternSpan.textContent = ' \u2502 mark lantern: carried';
+      lanternSpan.style.color = 'var(--mark-amber)';
+      Wilds._descEl.appendChild(lanternSpan);
+    }
+
+    /* §24.10: show weapon/armor durability in status bar */
+    var wLabel = Combat.weaponLabel();
+    if (wLabel) {
+      var weapSpan = document.createElement('span');
+      weapSpan.textContent = ' \u2502 ' + wLabel;
+      Wilds._descEl.appendChild(weapSpan);
+    }
+    var aLabel = Combat.armorLabel();
+    if (aLabel) {
+      var armorSpan = document.createElement('span');
+      armorSpan.textContent = ' \u2502 ' + aLabel;
+      Wilds._descEl.appendChild(armorSpan);
     }
   },
 
@@ -1383,14 +1429,15 @@ var Wilds = {
 
       var isHaven  = (nx === Wilds.START_X && ny === Wilds.START_Y);
       var explored = Wilds._isExplored(nx, ny) || isHaven;
-      var canMove  = !wounded && food >= 1 && (explored || hasLantern || torches > 0);
+      /* Section 23: lantern does NOT bypass torch requirement for movement */
+      var canMove  = !wounded && food >= 1 && (explored || torches > 0);
       btn.disabled = !canMove;
 
       if (!canMove) {
         /* Explain why the button is disabled */
-        if (wounded)                                        btn.title = 'you are wounded';
-        else if (food < 1)                                  btn.title = 'no food';
-        else if (!explored && !hasLantern && torches < 1)  btn.title = 'no torch';
+        if (wounded)                        btn.title = 'you are wounded';
+        else if (food < 1)                  btn.title = 'no food';
+        else if (!explored && torches < 1)  btn.title = 'no torch';
       } else if (explored && !isHaven) {
         var adj = Wilds._getTile(nx, ny);
         if (adj !== 'sick') btn.title = adj;
@@ -1422,7 +1469,7 @@ var Wilds = {
       }
     }
 
-    /* FIX 2: use bandage — heals 25 HP; available any time in exploration */
+    /* Section 21: use bandage — heals 10 HP; available any time in exploration */
     var _bandCnt = (_bActCarry.bandages || 0);
     var _curHp   = $SM.get('game.player.health', true) || 100;
     if (_bandCnt > 0 && _curHp < 100) {
@@ -1435,8 +1482,9 @@ var Wilds = {
         c.bandages--;
         $SM.set('game.carry', c, true);
         var hp = $SM.get('game.player.health', true) || 0;
-        $SM.set('game.player.health', Math.min(100, hp + 25), true);
-        Wilds._addLog('bandage applied. ' + Math.min(100, hp + 25) + ' / 100.', 'timestamp');
+        var newHp = Math.min(100, hp + 10);
+        $SM.set('game.player.health', newHp, true);
+        Wilds._addLog('bandage applied. ' + newHp + ' / 100.', 'timestamp');
         Wilds._buildActions();
         Wilds._renderCarry();
       });
@@ -1519,7 +1567,8 @@ var Wilds = {
   /* GDD §9: return to haven — instant, no cost; deposit carry; restore health */
   _returnToHaven: function() {
     var carry = $SM.get('game.carry') || {};
-    var cap   = $SM.get('game.buildings.storehouse') ? 100 : 50;
+    /* Section 1: use correct storage caps */
+    var cap   = $SM.get('game.buildings.storehouse') ? Haven.STOREHOUSE_CAP : Haven.BASE_STORE_CAP;
 
     /* FIX 1: return inventory items (bandages/traps/poultice) to game.inventory */
     var INV_ITEMS = ['bandages', 'traps', 'poultice'];
@@ -1532,19 +1581,37 @@ var Wilds = {
     });
 
     /* Deposit remaining resources (including food) to stores */
+    var leftBehind = [];
     Object.keys(carry).forEach(function(r) {
       if ((carry[r] || 0) > 0) {
         if ($SM.get('stores.' + r) === undefined) $SM.set('stores.' + r, 0, true);
-        var cur = $SM.get('stores.' + r, true);
-        var add = Math.min(carry[r], cap - cur);
+        var cur  = $SM.get('stores.' + r, true);
+        var add  = Math.min(carry[r], cap - cur);
+        var lost = carry[r] - add;
         if (add > 0) $SM.add('stores.' + r, add, true);
+        /* Section 1: excess loot silently capped — show message per resource left behind */
+        if (lost > 0) leftBehind.push(lost + ' ' + r);
       }
     });
+    /* Show "left behind" messages after arrival */
+    if (leftBehind.length > 0) {
+      Engine.setTimeout(function() {
+        leftBehind.forEach(function(msg) {
+          Haven._addLog('no room in the stores. ' + msg + ' left behind.', 'timestamp');
+        });
+      }, 500);
+    }
     $SM.set('game.carry',          {},    true);
     $SM.set('game.player.health',  100,   true);
     $SM.set('game.player.wounded', false, true);
     $SM.set('game.player.x',       Wilds.START_X, true);
     $SM.set('game.player.y',       Wilds.START_Y, true);
+
+    /* §24: clear old medicine temporary HP bonus on haven return */
+    if ($SM.get('game.player.medicineBonusActive')) {
+      $SM.remove('game.player.bonusMaxHp',          true);
+      $SM.remove('game.player.medicineBonusActive', true);
+    }
 
     /* FIX 1: expedition ends on return */
     $SM.set('game.wilds.onExpedition', false, true);
@@ -1563,17 +1630,23 @@ var Wilds = {
     /* Section 10: villager react to player returning */
     if (typeof Haven !== 'undefined') Engine.setTimeout(function() { Haven._villagerReact('return'); }, 800);
 
-    /* Final Overhaul §7: return summary */
+    /* §17: return summary */
     var dep      = $SM.get('game.wildsDeparture') || {};
     var curFire  = $SM.get('game.fire.level', true) || 0;
     var curPop   = ($SM.get('game.population') || []).length;
-    var depFire  = dep.fireLevel !== undefined ? dep.fireLevel : curFire;
-    var depPop   = dep.popCount  !== undefined ? dep.popCount  : curPop;
+    var depFire  = dep.fireLevel  !== undefined ? dep.fireLevel  : curFire;
+    var depPop   = dep.popCount   !== undefined ? dep.popCount   : curPop;
+    var depStore = dep.storeTotal !== undefined ? dep.storeTotal : 0;
+    var curResources = ['wood','stone','iron','cloth','herbs','food'];
+    var curTotal = curResources.reduce(function(sum, r) { return sum + ($SM.get('stores.' + r, true) || 0); }, 0);
     var changes  = [];
     if (curFire < depFire) changes.push('the fire burned low.');
     if (curPop < depPop) {
-      var gone = depPop - curPop;
-      changes.push(gone === 1 ? 'someone left.' : gone + ' people left.');
+      changes.push(depPop - curPop === 1 ? 'someone left. not enough food.' : (depPop - curPop) + ' people left. not enough food.');
+    }
+    /* Stores lighter from night attack (exclude normal food consumption from expedition) */
+    if (depStore > 0 && curTotal < depStore - curPop /* subtract expected food consumption */) {
+      changes.push('the stores are lighter.');
     }
 
     Engine.travelTo(Haven);
@@ -1834,6 +1907,10 @@ var Wilds = {
           cell.style.color = 'var(--mark-amber)';
         } else if (wx < 0 || wx >= Wilds.MAP_W || wy < 0 || wy >= Wilds.MAP_H) {
           cell.textContent = ' ';
+        } else if (wx === 6 && wy === 6) {
+          /* §15: haven H always visible */
+          cell.textContent = 'H';
+          cell.style.color = 'var(--nature-sage)';
         } else if (trapsMap[Wilds._key(wx, wy)] && Wilds._isExplored(wx, wy)) {
           /* FIX 2: trapped tile marker */
           cell.textContent = 't';
@@ -1950,10 +2027,10 @@ var Wilds = {
   _showBreadcrumb: function(x, y) {
     var PRIORITY = ['sanctum','ruin','warden','den','grove','cache','forest'];
     var HINTS = {
-      ruin:    'cracked earth. but something catches your eye to the [dir]. worked stone. not natural.',
-      den:     'the mark flickers. something is close. the air feels wrong to the [dir].',
+      ruin:    'something catches your eye to the [dir]. worked stone.',
+      den:     'the mark flickers. the air feels wrong to the [dir].',
       grove:   'a faint smell. green. alive. somewhere to the [dir].',
-      warden:  'old footprints in the dust. someone lived nearby. to the [dir].',
+      warden:  'old footprints. someone lived nearby. to the [dir].',
       sanctum: 'the mark burns. something ancient lies to the [dir].',
       cache:   'scattered debris to the [dir]. could be useful.',
       forest:  'dead trunks to the [dir]. wood, at least.'
@@ -1999,8 +2076,15 @@ var Wilds = {
 
   /* Section 12: companion carry bonus */
   _getMaxCarry: function() {
-    var bonus = ($SM.get('game.companion.alive') && $SM.get('game.companion.present')) ? 10 : 0;
-    return Wilds.MAX_CARRY + bonus;
+    var companionBonus = ($SM.get('game.companion.alive') && $SM.get('game.companion.present')) ? 10 : 0;
+    /* Section 24: reinforced pack adds 5 slots permanently */
+    var packBonus = $SM.get('game.player.packBonus') || 0;
+    return Wilds.MAX_CARRY + companionBonus + packBonus;
+  },
+
+  /* Section 24: max HP with old medicine bonus */
+  _getMaxHp: function() {
+    return 100 + ($SM.get('game.player.bonusMaxHp') || 0);
   }
 
 };

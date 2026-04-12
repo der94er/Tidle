@@ -43,9 +43,9 @@ var Haven = {
   GATHER_MIN: 1,
   GATHER_MAX: 3,
 
-  /* GDD §4 — base storage cap 50, storehouse raises to 100 */
-  BASE_STORE_CAP: 50,
-  STOREHOUSE_CAP: 100,
+  /* Section 1 — base storage cap 100, storehouse raises to 300 */
+  BASE_STORE_CAP: 100,
+  STOREHOUSE_CAP: 300,
 
   /* GDD §8 — shelter (start) holds 2; hut 5; lodge 10 */
   START_POP_CAP: 2,
@@ -90,14 +90,14 @@ var Haven = {
 
   /* GDD §7 — 10 crafting recipes */
   CRAFTING: [
-    { id: 'torch',           label: 'torch (\xd75)',            cost: { wood: 3, cloth: 2 },              req: 'workshop',     qty: 5,  inv: 'torches',           stack: true  },
+    { id: 'torch',           label: 'torch',                    cost: { wood: 3, cloth: 2 },              req: 'workshop',     qty: 1,  inv: 'torches',           stack: true  },
     { id: 'crudeSword',      label: 'crude sword',              cost: { iron: 5, wood: 3 },              req: 'workshop',     qty: 1,  inv: 'crudeSword',         stack: false },
     { id: 'crudeArmor',      label: 'crude armor',              cost: { iron: 5, cloth: 5 },             req: 'workshop',     qty: 1,  inv: 'crudeArmor',         stack: false },
     { id: 'poultice',        label: 'poultice',                 cost: { herbs: 3 },                      req: 'herbalistHut', qty: 1,  inv: 'poultice',           stack: true  },
     { id: 'bandages',        label: 'bandages (\xd73)',         cost: { cloth: 2, herbs: 1 },            req: 'workshop',     qty: 3,  inv: 'bandages',           stack: true  },
     { id: 'steelSword',      label: 'steel sword',              cost: { iron: 10, wood: 5, cloth: 2 },   req: 'forge',        qty: 1,  inv: 'steelSword',         stack: false },
     { id: 'steelArmor',      label: 'steel armor',              cost: { iron: 12, cloth: 8, wood: 3 },   req: 'forge',        qty: 1,  inv: 'steelArmor',         stack: false },
-    { id: 'reinforcedTorch', label: 'reinforced torch (\xd75)', cost: { wood: 5, cloth: 3, iron: 2 },    req: 'forge',        qty: 5,  inv: 'reinforcedTorches',  stack: true  },
+    { id: 'reinforcedTorch', label: 'reinforced torch',         cost: { wood: 5, cloth: 3, iron: 2 },    req: 'forge',        qty: 1,  inv: 'reinforcedTorches',  stack: true  },
     { id: 'trap',            label: 'trap (\xd73)',             cost: { iron: 5, wood: 5 },              req: 'workshop',     qty: 3,  inv: 'traps',              stack: true  },
     { id: 'markLantern',     label: 'mark lantern',             cost: { iron: 3, cloth: 2, markFragments: 1 }, req: 'forge', qty: 1,  inv: 'markLantern',        stack: false }
   ],
@@ -122,8 +122,8 @@ var Haven = {
   VILLAGER_DECLINE: {
     fearful:   '\u2026i understand.',
     practical: 'fine. i\u2019ll manage.',
-    curious:   'worth asking, i suppose.',
-    spiritual: 'the mark provides.',
+    curious:   'maybe next time.',
+    spiritual: 'the land provides when it\u2019s ready.',
     quiet:     null /* quiet: just a nod */
   },
 
@@ -387,6 +387,10 @@ var Haven = {
     } else {
       /* GDD §4: food=0 → one villager leaves per game-day, last to arrive first */
       $SM.set('stores.food', 0, true);
+      /* §17: hollow feeling message in wilds log when food runs out */
+      if (typeof Wilds !== 'undefined' && Engine.activeModule === Wilds) {
+        Wilds._addLog('a hollow feeling. someone at the haven is hungry.', 'timestamp');
+      }
       Haven._removeVillager();
     }
   },
@@ -755,6 +759,10 @@ var Haven = {
     $SM.set('game.population', pop, true);
 
     Haven._addLog(leaving.name.toLowerCase() + ' leaves. not enough food.');
+    /* §17: deterioration message in wilds log */
+    if (typeof Wilds !== 'undefined' && Engine.activeModule === Wilds) {
+      Wilds._addLog('a name fades from your awareness. someone has left.', 'timestamp');
+    }
     Haven._updatePopDisplay();
     $SM.fireUpdate('game', true);
   },
@@ -898,6 +906,22 @@ var Haven = {
     });
   },
 
+  /* §9: briefly pulse (highlight) a build button by building key */
+  _pulseBuildBtn: function(buildKey) {
+    var btn = Haven._buildingsEl && Haven._buildingsEl.querySelector('[data-building="' + buildKey + '"]');
+    if (!btn) return;
+    btn.classList.add('pulse-highlight');
+    Engine.setTimeout(function() { btn.classList.remove('pulse-highlight'); }, 3000);
+  },
+
+  /* §9: briefly pulse (highlight) a craft button by recipe id */
+  _pulseCraftBtn: function(recipeId) {
+    var btn = Haven._craftingEl && Haven._craftingEl.querySelector('[data-recipe="' + recipeId + '"]');
+    if (!btn) return;
+    btn.classList.add('pulse-highlight');
+    Engine.setTimeout(function() { btn.classList.remove('pulse-highlight'); }, 3000);
+  },
+
   _makeCraftButton: function(recipe) {
     var btn = document.createElement('button');
     btn.className      = 'action-btn craft-btn';
@@ -949,9 +973,10 @@ var Haven = {
       $SM.add(sk, -recipe.cost[r], true);
     }
 
-    /* Section 1A: Torch and reinforced torch use charge pool */
+    /* Section 23: Torch and reinforced torch use charge pool.
+       Regular torch: 5 charges per craft. Reinforced torch: 15 charges per craft. */
     if (recipe.id === 'torch' || recipe.id === 'reinforcedTorch') {
-      var chargesPerItem    = (recipe.id === 'torch') ? 20 : 40;
+      var chargesPerItem    = (recipe.id === 'torch') ? 5 : 15;
       var totalNew          = recipe.qty * chargesPerItem;
       var curCharges        = $SM.get('game.inventory.torchCharges',    true) || 0;
       var curMaxCharges     = $SM.get('game.inventory.torchMaxCharges', true) || 0;
@@ -974,6 +999,15 @@ var Haven = {
     } else {
       /* Weapons/armor: equipping replaces old (GDD §7) */
       $SM.set(invKey, true, true);
+      /* §24.10: set initial durability on weapon/armor craft */
+      var durMap = { crudeSword: 5, steelSword: 10, crudeArmor: 8, steelArmor: 12 };
+      if (durMap[recipe.inv] !== undefined) {
+        if (recipe.inv === 'crudeSword' || recipe.inv === 'steelSword') {
+          $SM.set('game.player.weaponDurability', durMap[recipe.inv], true);
+        } else {
+          $SM.set('game.player.armorDurability', durMap[recipe.inv], true);
+        }
+      }
     }
 
     Haven._addLog(recipe.label + ' crafted.');
@@ -1149,11 +1183,11 @@ var Haven = {
     }, s.time);
   },
 
-  /* Final Overhaul §14: resource drain events */
+  /* Section 7: resource drain events — check if any resource exceeds 200 */
   _checkResourceDrain: function() {
     var RESOURCES   = ['wood', 'stone', 'iron', 'cloth', 'herbs', 'food'];
-    var THRESHOLD   = 400;
-    var DRAIN_FLOOR = 200;
+    var THRESHOLD   = 200;
+    var DRAIN_FLOOR = 150;
     var DRAIN_TEXTS = [
       'a section of the storehouse collapses. some supplies are buried.',
       'the sickness seeps through a crack in the wall. some stores are ruined.',
@@ -1281,7 +1315,7 @@ var Haven = {
       if (declineText) {
         Haven._addLog(vneed.name.toLowerCase() + ': \u2018' + declineText + '\u2019', 'timestamp');
       } else {
-        Haven._addLog(vneed.name.toLowerCase() + ' nods. says nothing.', 'timestamp');
+        Haven._addLog(vneed.name.toLowerCase() + ' nods. returns to work.', 'timestamp');
       }
       Haven._buildButtons();
     });
@@ -1414,12 +1448,22 @@ var Haven = {
 
     var cnt = document.createElement('span');
     cnt.className   = 'store-count';
-    cnt.textContent = (value !== undefined) ? value : 0;
+    /* §24.11: show cap for capped resources (wood/stone/iron/cloth/herbs/food) */
+    var cappedResources = ['wood', 'stone', 'iron', 'cloth', 'herbs', 'food'];
+    if (cappedResources.indexOf(name) !== -1) {
+      var cap = $SM.get('game.buildings.storehouse') ? Haven.STOREHOUSE_CAP : Haven.BASE_STORE_CAP;
+      cnt.textContent = (value !== undefined ? value : 0) + ' / ' + cap;
+    } else {
+      cnt.textContent = (value !== undefined) ? value : 0;
+    }
 
     row.appendChild(lbl);
     row.appendChild(cnt);
     Haven._storesEl.appendChild(row);
   },
+
+  /* Section 14: cap at 8 visible log entries — oldest scroll off */
+  LOG_CAP: 8,
 
   _addLog: function(text, type, delay) {
     function render() {
@@ -1428,6 +1472,14 @@ var Haven = {
       if (type === 'timestamp') el.classList.add('timestamp');
       el.textContent = text;
       Haven._logEl.appendChild(el);
+
+      /* Enforce 8-entry cap: remove oldest when exceeded */
+      var entries = Haven._logEl.querySelectorAll('.narrative');
+      while (entries.length > Haven.LOG_CAP) {
+        Haven._logEl.removeChild(Haven._logEl.firstChild);
+        entries = Haven._logEl.querySelectorAll('.narrative');
+      }
+
       requestAnimationFrame(function() {
         requestAnimationFrame(function() {
           el.classList.add('visible');
@@ -1491,8 +1543,8 @@ var Haven = {
           Haven._addLog('a villager calls out. something in the dirt.');
           Haven._addLog('a sword. rusted. broken. but real.', 'timestamp');
           Haven._addLog('something used this. something that fights.', 'timestamp');
-          Haven._addLog('threats exist beyond the green patch.', 'timestamp');
-          $SM.add('stores.iron', 5);
+          /* Pulse the crude sword recipe button to draw attention */
+          Haven._pulseCraftBtn('crudeSword');
         }, 2000);
       }
     }

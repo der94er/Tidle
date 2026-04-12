@@ -913,3 +913,30 @@ body.night {
   padding: 0 0 12px;
   line-height: 1.6;
 }
+
+/* §9: craft button pulse highlight (whoa event 1) */
+@keyframes craftPulse {
+  0%   { background: transparent; color: var(--mark-amber); }
+  50%  { background: var(--mark-amber); color: #0D0D0D; }
+  100% { background: transparent; color: var(--mark-amber); }
+}
+.pulse-highlight {
+  animation: craftPulse 0.8s ease-in-out 3;
+}
+
+/* §13: grave tab pulsing amber dot */
+@keyframes graveDotPulse {
+  0%   { opacity: 0.3; }
+  50%  { opacity: 1.0; }
+  100% { opacity: 0.3; }
+}
+.grave-pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mark-amber);
+  animation: graveDotPulse 3s ease-in-out infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}

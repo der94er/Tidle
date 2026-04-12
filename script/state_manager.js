@@ -197,9 +197,17 @@ var StateManager = {
     return $SM.get('income["' + source + '"]') || {};
   },
 
+  /* Section 1: resources that obey the storage cap */
+  CAPPED_RESOURCES: ['wood', 'stone', 'iron', 'cloth', 'herbs', 'food'],
+
   collectIncome: function() {
     var changed = false;
     var income = $SM.get('income');
+
+    /* Section 1: enforce storage cap on villager production and auto-structure income.
+       Without storehouse: 100 per resource. With storehouse: 300 per resource. */
+    var storeCap = ($SM.get('game.buildings.storehouse')) ? 300 : 100;
+
     if (typeof income !== 'undefined') {
       for (var source in income) {
         var entry = $SM.get('income["' + source + '"]');
@@ -214,7 +222,19 @@ var StateManager = {
               break;
             }
           }
-          if (ok) $SM.addM('stores', entry.stores, true);
+          if (ok) {
+            /* Cap-aware addition: excess from auto-production is silently discarded */
+            for (var r in entry.stores) {
+              var amt = entry.stores[r];
+              if (amt > 0 && $SM.CAPPED_RESOURCES.indexOf(r) !== -1) {
+                var cur = $SM.get('stores["' + r + '"]', true) || 0;
+                var add = Math.min(amt, storeCap - cur);
+                if (add > 0) $SM.add('stores["' + r + '"]', add, true);
+              } else {
+                $SM.add('stores["' + r + '"]', amt, true);
+              }
+            }
+          }
           changed = true;
           if (typeof entry.delay === 'number') entry.timeLeft = entry.delay;
         }

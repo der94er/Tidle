@@ -236,7 +236,7 @@ Exploration opens. A grid map appears.
 
 The land outside the haven is sick. Black soil. Twisted trees. Foul water.
 
-Map is 20×20 (400 tiles). Pre-designed, not random.
+Map is 12×12 (144 tiles). Pre-designed, not random.
 
 Points of interest scattered across the map (25 total):
 - 10 ruins (contain memory fragments — YOUR memories)
@@ -375,28 +375,32 @@ Epilogue text plays. Score calculated. Leaderboard submit.
 | Mark fragments | Found in warden camps and creature dens (rare, ~10 in game) | Unlock final area (5 needed), craft mark lantern (1 needed), bonus score (+50 per extra) |
 
 ### Resource rules
-- Storage capacity starts at 50 per resource. Storehouse doubles it to 100. No further expansion.
+- Storage capacity: 100 per resource (hard cap). With storehouse: 300 per resource (hard cap).
+- Cap applies to ALL sources: villager production, manual gathering, exploration loot, trades.
+- Manual gathering over cap: "stores are full. resources wasted." (shown to player)
+- Exploration loot over cap: "no room in the stores. some [resource] left behind."
+- Auto-production over cap: excess silently discarded (no warning spam).
 - Resources are integers. No decimals. No fractions.
 - If a resource hits 0, any action requiring it is blocked with clear message: "not enough wood."
 - Fire consumes wood per game-day automatically (see Section 12). If wood is 0, fire level drops. Mark never fails.
-- Food consumes 1 per villager per game-day. If food is 0, 1 villager leaves per game-day until food returns.
+- Food consumes 1 per villager per 2 real minutes (= 1 per game-day). If food is 0, 1 villager leaves per game-day until food returns.
 
 ---
 
 ## 5. TIME SYSTEM
 
-**1 game-day = 3 real minutes.**
+**1 game-day = 2 real minutes.**
 
 This means:
-- A 3-hour playthrough = ~60 game-days.
-- Fire consumes wood every 3 minutes (rate depends on fire level).
-- Each villager consumes 1 food every 3 minutes.
-- Gathering actions take 10 real seconds.
+- A 2-hour playthrough = ~60 game-days.
+- Fire consumes wood every 2 minutes (rate depends on fire level).
+- Each villager consumes 1 food every 2 minutes.
+- Gathering is instant (click to receive, then cooldown bar).
 - Building actions take 30-120 real seconds (displayed as a progress bar).
 
 **All timers are real-time while the player has the game open.** No offline progress. Timers pause when the tab is hidden (using Page Visibility API).
 
-**Day/night cycle:** Every 90 real seconds (half a game-day), the game alternates between "day" and "night." Night increases combat difficulty by 25% and reduces gathering speed by 25%. Visual: text gets slightly dimmer during night. Dawn/dusk messages appear:
+**Day/night cycle:** Every 60 real seconds (half a game-day), the game alternates between "day" and "night." Night increases combat difficulty by 25% and adds 5 seconds to all gather cooldowns. Visual: text gets slightly dimmer during night. Dawn/dusk messages appear:
 ```
 "night falls. the mark glows brighter in the dark."
 "dawn. grey and cold. the sickness is thicker in the mornings."
@@ -414,11 +418,11 @@ This means:
 | Shelter (start) | — | — | — | Holds 2 people. |
 | Hut | 15 wood, 10 stone | 45s | Shelter | Holds 5 people. |
 | Lodge | 25 wood, 15 stone, 5 iron | 75s | Hut | Holds 10 people. |
-| Storehouse | 20 wood, 10 stone | 45s | — | Storage cap: 50 → 100 per resource. |
+| Storehouse | 20 wood, 10 stone | 45s | — | Storage cap: 100 → 300 per resource. |
 | Workshop | 20 wood, 10 stone, 10 iron | 60s | — | Enables all crafting. |
 | Watchtower | 15 stone, 10 iron | 60s | — | Enables exploration. Warns of night creatures. |
 | Herbalist hut | 10 wood, 3 herbs | 30s | Workshop | Assigns herbalist. Auto-produces 1 medicine per game-day. |
-| Trading post | 20 wood, 15 stone, 10 iron, 5 cloth | 90s | Workshop | Travelers arrive every 5-8 game-days with goods. |
+| Trading post | 20 wood, 15 stone, 10 iron, 5 cloth | 90s | Workshop | Trader arrives every 5 game-days with dynamic pricing. Also unlocks weaver role. |
 
 ### Building rules
 - Each building can only be built ONCE. No duplicates.
@@ -433,16 +437,16 @@ This means:
 
 | Item | Materials | Requires | Effect |
 |------|-----------|----------|--------|
-| Torch (×5) | 3 wood + 2 cloth | Workshop | 20 exploration charges. |
-| Crude sword | 5 iron + 3 wood | Workshop | Attack +2 |
-| Crude armor | 5 iron + 5 cloth | Workshop | Defense +2 |
-| Poultice | 3 herbs | Herbalist hut | Heals 1 wound. Removes "wounded" status. |
-| Bandages (×3) | 2 cloth + 1 herbs | Workshop | Restores 25% health during exploration. |
-| Steel sword | 10 iron + 5 wood + 2 cloth | Forge | Attack +5 |
-| Steel armor | 12 iron + 8 cloth + 3 wood | Forge | Defense +5 |
-| Reinforced torch (×5) | 5 wood + 3 cloth + 2 iron | Forge | 40 charges. Reveals adjacent tiles on map. |
-| Trap (×3) | 5 iron + 5 wood | Workshop | Place on map tile. Auto-kills weak creatures. |
-| Mark lantern | 3 iron + 2 cloth + 1 mark fragment | Forge | Permanent light. No torch charges needed. Required for final area. |
+| Torch | 3 wood + 2 cloth | Workshop | 5 exploration charges. Multiple craft = stacks. |
+| Crude sword | 5 iron + 3 wood | Workshop | Attack +2. Durability: 5. |
+| Crude armor | 5 iron + 5 cloth | Workshop | Defense +2. Durability: 5. |
+| Poultice | 3 herbs | Herbalist hut | Removes "wounded" status. Use in haven. |
+| Bandages (×3) | 2 cloth + 1 herbs | Workshop | Heals 10 HP during exploration. Use any time. |
+| Steel sword | 10 iron + 5 wood + 2 cloth | Forge | Attack +5. Durability: 10. |
+| Steel armor | 12 iron + 8 cloth + 3 wood | Forge | Defense +5. Durability: 10. |
+| Reinforced torch | 5 wood + 3 cloth + 2 iron | Forge | 15 charges. Multiple craft = stacks. |
+| Trap (×3) | 5 iron + 5 wood | Workshop | Place on map. Captures creature on revisit. Loot: 3-5 cloth (near haven) or wood (far). |
+| Mark lantern | 3 iron + 2 cloth + 1 mark fragment | Forge | KEY ITEM — not a light source. Does: (1) mark's light costs 0 charges, (2) required to enter sanctum, (3) required for Blight Heart fight. Torches ALWAYS needed for movement. |
 
 ### Crafting rules
 - Each item has exactly ONE recipe. No alternatives. No quality tiers.
@@ -477,16 +481,20 @@ Each stranger comments on why they came:
 ```
 
 ### Assignment
-Each villager can be assigned to ONE task:
-- Woodcutter: produces 1 wood per 10 seconds
-- Stonecutter: produces 1 stone per 10 seconds
-- Miner: produces 1 iron per 15 seconds
-- Hunter: produces 1 food per 10 seconds
-- Herbalist: produces 1 herbs per 20 seconds (requires herbalist hut)
-- Guard: reduces night creature losses by 1 per guard
+Each villager can be assigned to ONE task (8 roles total, max 10 villagers — real allocation decisions):
+- Woodcutter: produces 1 wood per 20 seconds
+- Stonecutter: produces 1 stone per 20 seconds
+- Miner: produces 1 iron per 30 seconds
+- Hunter: produces 1 food per 15 seconds
+- Herbalist: produces 1 herbs per 30 seconds (requires herbalist hut)
+- Guard: reduces night creature losses by 1 per guard (no resource production)
+- Herbalist: produces 1 herbs per 30 seconds (requires herbalist hut)
+- Weaver: produces 1 cloth per 30 seconds (requires trading post)
+
+All production is silently capped at 100 (or 300 with storehouse). Excess discarded.
 
 ### Population rules
-- Each person consumes 1 food per game-day (3 real minutes).
+- Each person consumes 1 food per 2 real minutes (= 1 per game-day).
 - If food = 0: one villager leaves every game-day. Last to arrive leaves first.
 - If all villagers leave, player is alone. New stranger arrives after fire is maintained for 2 game-days.
 - Villagers cannot die from creature attacks IF watchtower is built and guards are assigned. Without watchtower, night creatures can kill 1 villager (random).
@@ -498,11 +506,13 @@ Each villager can be assigned to ONE task:
 ## 9. EXPLORATION — 20×20 Grid Map
 
 ### Map structure
-- 400 tiles total. Player starts at center (10, 10).
-- Tiles are hidden (fog of war) until explored.
-- Moving to an adjacent tile costs: 1 torch charge + 1 food.
-- With mark lantern: no torch charge needed, just 1 food.
-- Player can carry up to 20 units of mixed resources while exploring. Must return to haven to deposit.
+- 144 tiles total (12×12). Player starts at center (6, 6).
+- Tiles are hidden until explored. POI letters hidden until visited or adjacent (shows as ? in amber).
+- Moving to unexplored tile costs: 1 torch charge + 1 food.
+- Moving to explored tile: free (0 torch charges) + 1 food.
+- Mark lantern does NOT bypass torch requirement. Torches always needed.
+- Player can carry up to 20 units while exploring (30 with companion, +5 with reinforced pack).
+- Must return to haven to deposit loot.
 
 ### Tile contents (pre-designed, not random)
 | Tile type | Count | What happens |
@@ -547,9 +557,11 @@ Note: Ruins (10) + Warden camps (5) + Creature dens (5) + Sacred groves (3) + Su
 ## 10. COMBAT — Simple Stat Check
 
 ### Player stats
-- Health: 100 (base). Restored by poultice (full heal) or bandages (+25).
-- Attack: 0 base + weapon bonus.
-- Defense: 0 base + armor bonus.
+- Health: 100 (base). +10 with old medicine (unique trader item). Restored fully on return to haven or at grove.
+- Bandages: +10 HP each (use during exploration, any time). Poultice: removes "wounded" status (use in haven).
+- Attack: 0 base + weapon bonus. Crude sword: +2. Steel sword: +5.
+- Defense: 0 base + armor bonus. Crude armor: +2. Steel armor: +5.
+- Durability: crude weapons/armor = 5 fights. Steel = 10 fights. At 0, item breaks mid-fight (atk/def drops to 0 for remaining rounds). Must craft replacement.
 
 ### Combat flow
 1. Encounter message: "the sick earth shifts. something rises."
@@ -675,9 +687,10 @@ The fire is powered by the mark. It keeps the sickness at bay. It must be mainta
 ### Fire rules
 - Starts at level 0 (mark only). Player builds first fire for free (Phase 1).
 - [stoke the fire] costs 1 wood, raises fire by 1 level (max 5).
-- Fire drops 1 level every game-day (3 minutes) if not stoked.
+- Fire drops 1 level every 5 real minutes (not every game-day). Makes maintenance less of a constant chore.
+- With hearth: fire drops 1 level every 10 real minutes instead of every 5.
 - Fire cannot drop below level 0. The mark NEVER fails. Core promise.
-- Hearth upgrade: fire drops 1 level every 2 game-days instead of 1.
+- No auto-stoking. Fire is the player's responsibility — just less frequent.
 - Higher fire level = wider green patch, more strangers, better trades, fewer night creatures.
 - If fire drops to 0: "the fire dies. the mark holds alone. the green circle shrinks. the sickness presses close." Production -50% until fire restored.
 
@@ -711,9 +724,13 @@ score = (memories × 100)
       + (tiles_explored × 2)
       + (days_survived × 3)
       + (extra_mark_fragments × 50)
+      + (creatures_healed × 20)
+      + (grave_respects × 5)
       + (seal_ending × 500)
+      + (companion_alive × 100)
       - (villagers_lost × 100)
       - (combat_retreats × 25)
+      - (companion_died × 150)
 ```
 
 **Score ranges:**
@@ -749,17 +766,18 @@ Kael, Lira, Maren, Noll, Ora, Penn, Reva, Soren, Tova, Wyn
 
 Names assigned randomly on arrival. Non-unique.
 
-### Trader goods (random selection when trader arrives)
-| Trader offers | Trader wants | Quantity |
-|--------------|-------------|----------|
-| 5 cloth | 5 iron | — |
-| 5 herbs | 5 wood | — |
-| 3 iron | 5 stone | — |
-| 1 mark fragment | 20 iron + 10 cloth | Rare (10% chance) |
-| 10 food | 5 herbs | — |
-| 3 cloth + 3 herbs | 10 stone | — |
+### Trader system (Section 24 — dynamic pricing)
+- Arrives every 5 game-days if trading post is built. Stays 1 game-day.
+- Dynamic pricing: trader buys player's most abundant resource, sells least abundant. Rate: 3 of yours → 1 of theirs.
+- Multiple trades allowed during their stay.
+- 25% chance of carrying a unique item (one per game total):
 
-Trader arrives every 5-8 game-days if trading post is built. Stays for 1 game-day, then leaves.
+| Unique item | Resource cost | Effect |
+|-------------|--------------|--------|
+| A traveler's map | 70 wood | Reveals 3 unexplored tiles |
+| Old medicine | 65 herbs | Removes wounded + +10 max HP (this trip) |
+| Warden's journal page | 75 stone | Rare atmospheric text |
+| Reinforced pack | 80 iron | +5 permanent pack capacity |
 
 ### Night creature table (if watchtower NOT built)
 | Roll (1-100) | Outcome |
@@ -974,9 +992,10 @@ the-last-ember/
 
 ### 1A. Torch System
 - Torches replaced with charge pool: `game.inventory.torchCharges` and `torchMaxCharges`
-- Regular torch (×5): +100 charges (20 per item) | Reinforced torch (×5): +200 charges (40 per item)
-- Each unexplored move: -1 charge | Mark lantern: unlimited
+- Regular torch (×1): +5 charges | Reinforced torch (×1): +15 charges
+- Each unexplored move: -1 charge. Mark lantern does NOT bypass this requirement.
 - Display: "torch: X/Y" where X=current, Y=max accumulated
+- Mark lantern shown separately as "mark lantern: carried" (amber). It is a KEY ITEM only, not a light source.
 
 ### 2A. Map Size
 - Shrunk from 20×20 (400 tiles) to 12×12 (144 tiles)
@@ -1013,7 +1032,7 @@ the-last-ember/
 
 ### 9. Mark's Light Combat Option
 - Available for: blighted fox, root crawler, sickness shade only
-- Costs 5 torch charges (0 with mark lantern)
+- Costs 5 torch charges (mark lantern does NOT reduce this cost)
 - Fox healed → 2-4 herbs | Crawler healed → 3-5 wood | Shade healed → 1 mark fragment
 - Score: creaturesHealed × 20
 
@@ -1207,7 +1226,7 @@ Tile positions (added to MAP_LAYOUT):
 - [go around] — -2 food
 
 **Sick fog:** "a low fog. thick. the mark dims in it."
-- [push through] — -3 torch charges (free with lantern)
+- [push through] — -3 torch charges
 - [wait for it to pass] — -1 food
 - [find another way] — -2 food
 
@@ -1218,7 +1237,7 @@ Tile positions (added to MAP_LAYOUT):
 
 **Thorn wall:** "twisted thorns. black. dense. they grew from the sickness."
 - [cut through] — requires weapon, -1 food
-- [burn through] — -3 torch charges (free with lantern)
+- [burn through] — -3 torch charges
 - [go around] — -2 food
 
 ### §22.7 Return Summary
@@ -1353,11 +1372,11 @@ A random encounter can trigger every 3 moves while in the wilds.
 
 When stores overflow, the land reclaims what isn't used.
 
-**Trigger:** Any resource exceeds 400. 30% chance per game-day.
+**Trigger:** Any resource exceeds 200. 30% chance per game-day.
 
 **Safety skip:** Never triggers if the player can currently afford any unbuilt building.
 
-**Drain amount:** 10–15% of the excess above 200 (minimum 1).
+**Drain amount:** 10–15% of the excess above 150 (minimum 1).
 
 **Flavor texts (one chosen at random):**
 - "a section of the storehouse collapses. some supplies are buried."
@@ -1398,7 +1417,7 @@ Before entering the wilds, a loadout UI is shown (gated by `game.wilds.onExpedit
 
 #### Bandages
 - `[use bandage]` button visible during exploration when `carry.bandages > 0`
-- Effect: +25 HP (capped at max), −1 `carry.bandages`
+- Effect: +10 HP (capped at max), −1 `carry.bandages`
 
 #### Traps
 - `[place trap]` button visible during exploration when `carry.traps > 0`
@@ -1413,7 +1432,7 @@ Before entering the wilds, a loadout UI is shown (gated by `game.wilds.onExpedit
 - Without poultice: player must wait 2 game-days naturally to heal
 
 #### Reinforced Torch
-- Provides 40 light charges (vs standard 20)
+- Provides 15 light charges per craft (vs standard 5 for regular torch)
 - When crafted: sets `game.inventory.hasReinforcedTorch = true`
 - Minimap effect: adjacent unvisited non-sick tiles reveal their actual character and color (rather than `'?'`). Tiles with sickness still show `'?'`
 
@@ -1473,7 +1492,7 @@ Four new trades added to the trade table, routing outcome to `game.inventory` vi
 | 5 torches | 5 wood + 3 cloth + 5 iron | true |
 | 1 trap | 8 iron + 3 wood | true |
 
-Torches add to `torchCharges` pool (20 charges each).
+Torches add to `torchCharges` pool (5 charges each).
 
 ---
 
@@ -1489,3 +1508,148 @@ Unlocked when trading post is built.
 | Role index | 7th role (after hunter) |
 
 Total roles: 7 (woodcutter, stone-carver, herbalist, iron-finder, healer, hunter, weaver).
+
+---
+
+## §24 COMPREHENSIVE GAMEPLAY OVERHAUL
+
+*All changes implemented. Values sourced verbatim from §24 specification.*
+
+### §24.1 Storage Cap
+- Base cap (no storehouse): 100 per resource (was 50)
+- With storehouse: 300 per resource (was 100)
+- Cap enforced in both `Haven._updateStores` (display) and `$SM.collectIncome` (auto-income tick)
+- When return from wilds exceeds cap: "no room in stores. X [resource] left behind." shown in haven log
+
+### §24.2 Torch System (Revised)
+- Regular torch craft: qty 1, +5 charges per craft (3 wood + 2 cloth)
+- Reinforced torch craft: qty 1, +15 charges per craft (5 wood + 3 cloth + 2 iron)
+- Mark lantern is a KEY ITEM. It does NOT provide general exploration light. Torches always required for unexplored movement.
+- Mark lantern specific effects:
+  1. Mark's light healing costs 0 torch charges (instead of 5)
+  2. Sick fog push-through costs 0 charges (instead of 3)
+  3. Required to enter Sunken Sanctum
+  4. Required to fight the Blight Heart
+- Thorn wall burn-through still costs 3 charges even with lantern
+- Loadout shows torch and lantern as separate rows
+
+### §24.3 Bandage Healing
+- Bandage heals 10 HP (was 25)
+- Capped at player max HP
+
+### §24.4 Resource Drain Events (Revised)
+- Trigger threshold: any resource > 200 (was 400)
+- Drain floor: 150 (was 200)
+- Drain amount: 10–15% of excess above 150 (minimum 1)
+
+### §24.5 Haven Log Cap
+- Maximum 8 narrative entries in haven log
+- Oldest `.narrative` entry removed when 9th is added
+
+### §24.6 Villager Decline Text
+- curious: "maybe next time."
+- spiritual: "the land provides when it's ready."
+- fearful: "…i understand."
+- practical: "fine. i'll manage."
+- quiet: (nods. returns to work.)
+
+### §24.7 Dynamic Trader (Full Spec)
+- Trader arrives every exactly 5 game-days (not random 5–8)
+- Dynamic pricing: sells most-abundant resource (player → trader) at 3:1 ratio, buys least-abundant
+- 25% chance of unique item offer per visit
+- Unique items (one-time purchases):
+  | Item | Cost | Effect |
+  |------|------|--------|
+  | traveler's map | 70 wood | reveals 3 random undiscovered tiles |
+  | old medicine | 65 herbs | heals wounds + temporary +10 max HP for current trip |
+  | warden's journal page | 75 stone | adds 1 random warden page (atmosphere) |
+  | reinforced pack | 80 iron | +5 permanent pack capacity (20→25 base, 30→35 with companion) |
+- State: `game.trader.bought.[id]` tracks which unique items have been purchased
+
+### §24.8 Trap Loot (Distance-Based)
+- Traps on revisit give loot based on distance from haven:
+  - ≤ 3 tiles: 3–5 cloth
+  - ≥ 4 tiles: 3–5 wood
+- Trap removed after yielding loot
+
+### §24.9 Pack Capacity
+- Base pack capacity: 20 slots
+- Companion bonus: +10 (total 30)
+- Reinforced pack bonus: +5 cumulative (20→25 base, 30→35 with companion)
+- State: `game.player.packBonus` (permanent, set by trader)
+
+### §24.10 Weapon/Armor Durability
+Each weapon and armor has a durability counter. One combat encounter uses 1 durability point on both equipped weapon and armor.
+
+| Item | Max Durability |
+|------|---------------|
+| crude sword | 5 |
+| steel sword | 10 |
+| warden's blade | 15 |
+| leather armor | 8 |
+| iron armor | 12 |
+| warden's coat | 18 |
+
+- At 0 durability: item shatters. Removed from character state. Message: "your [item] shatters."
+- Display in loadout and status bar: "steel sword (7/10)"
+- State: `character.equip.weaponDurability`, `character.equip.armorDurability`
+- On equip of new item: durability set to item's max
+
+### §24.11 Storage Cap Display
+- Haven stores section shows storage cap: e.g. "wood: 45 / 100"
+- Cap updates immediately when storehouse is built (100 → 300)
+
+### §24.12 Gathering Rates (Revised — Instant with Cooldown)
+- gather wood: 1–3 wood, 15s cooldown
+- gather stone: 1–3 stone, 15s cooldown
+- gather herbs: 1–2 herbs, 15s cooldown
+- salvage cloth: 1–2 cloth, 15s cooldown
+- gather iron: 1–2 iron, 20s cooldown (fire ≥ 3 required)
+- Night penalty: +5s to all cooldowns when `game.isNight === true`
+
+### §24.13 Villager Production Rates
+- woodcutter: 1 wood per 20s
+- stone-carver: 1 stone per 20s (stonecutter role)
+- miner: 1 iron per 30s
+- hunter: 1 food per 15s
+- herbalist: 1 herbs per 30s
+- healer: removes `wounded` flag after 2 game-days
+- weaver: 1 cloth per 30s (unlocked when tradingPost built)
+
+### §24.11 Section 9 Whoa Events (Updated)
+- Event 1 (Buried Weapon): no iron add. Crude sword recipe button pulses (CSS animation 3×).
+- Event 2 (First Night Attack): Watchtower build button pulses after attack fires.
+
+### §24.12 Haven Deterioration Messages in Wilds Log
+- Food runs out at haven: "a hollow feeling. someone at the haven is hungry."
+- Villager leaves: "a name fades from your awareness. someone has left."
+- Night attack with store loss: "unease. something happened at the haven."
+- Fire level messages: already in fire decay tick (level 2/1/0)
+
+### §24.13 Return Summary
+- "you return to the haven."
+- Fire dropped: "the fire burned low."
+- Villager left: "someone left. not enough food." (or "N people left...")
+- Stores lighter from attack: "the stores are lighter."
+- Fine: "the fire burns. the people are fed. all is well."
+
+### §24.14 Grave Tab Pulsing Dot
+- After Phase 1 completes, grave tab shows pulsing amber dot (CSS opacity 0.3→1.0, 3s cycle)
+- Fire ≤ 1: "the mark flickers." Fire ≥ 2: "the mark burns. steady."
+
+### §24.16 Score Formula (Final)
+```
+score = (memories × 100)
+      + (buildings × 50)
+      + (max_population × 25)
+      + (combat_wins × 15)
+      + (tiles_explored × 2)
+      + (days_survived × 3)
+      + (extra_mark_fragments × 50)
+      + (seal_ending × 500)
+      + (creatures_healed × 20)
+      + (grave_respects × 5)
+      + companion_bonus (+100 alive / -150 died / 0 not taken)
+      - (villagers_lost × 100)
+      - (combat_retreats × 25)
+```
