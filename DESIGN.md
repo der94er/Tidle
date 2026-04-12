@@ -687,8 +687,8 @@ The fire is powered by the mark. It keeps the sickness at bay. It must be mainta
 ### Fire rules
 - Starts at level 0 (mark only). Player builds first fire for free (Phase 1).
 - [stoke the fire] costs 1 wood, raises fire by 1 level (max 5).
-- Fire drops 1 level every 5 real minutes (not every game-day). Makes maintenance less of a constant chore.
-- With hearth: fire drops 1 level every 10 real minutes instead of every 5.
+- Fire drops 1 level every 3 real minutes (not every game-day). Makes maintenance less of a constant chore.
+- With hearth: fire drops 1 level every 6 real minutes instead of every 3.
 - Fire cannot drop below level 0. The mark NEVER fails. Core promise.
 - No auto-stoking. Fire is the player's responsibility — just less frequent.
 - Higher fire level = wider green patch, more strangers, better trades, fewer night creatures.
@@ -1104,14 +1104,16 @@ After 8 manual gathers of a resource, a one-time build button appears in the act
 | mark a quarry | 8 stone gathers | 5 stone, 5 iron | 30s | +1 stone / 45s |
 | tend a garden | 8 herb gathers | 5 herbs, 5 wood | 30s | +1 herbs / 60s |
 | shore up the mine | 8 iron gathers | 10 iron, 5 wood | 30s | +1 iron / 60s |
+| build a snare line | 8 food forages | 10 wood, 5 cloth | 30s | +1 food / 45s |
 
 Completion messages:
 - woodpile: "a woodpile. the scraps add up."
 - quarry: "a quarry marker. the stone comes easier now."
 - garden: "a small garden in the green patch. life persists."
 - mine: "the mine holds. iron flows."
+- snare: "snares along the green patch. something will wander in."
 
-Income keys: `auto_woodpile`, `auto_quarryMarker`, `auto_garden`, `auto_mineShoreUp`
+Income keys: `auto_woodpile`, `auto_quarryMarker`, `auto_garden`, `auto_mineShoreUp`, `auto_snare`
 State keys: `game.autoStructures.[key].shown`, `game.autoStructures.[key].built`
 Gather counts: `game.gatherCounts.[resource]`
 
@@ -1255,6 +1257,22 @@ On `_returnToHaven()`, comparison shown in haven log:
 - Text: "iron scraps from the ruins. bent, but usable." (shown in gather area)
 - Counts toward `game.gatherCounts.iron` for §22.2 auto-structure unlock
 
+### §22.8b Food Foraging
+
+**[forage for food]** button is always visible in the haven actions panel (like wood/stone).
+
+- Yield: 1–2 food, instant
+- Cooldown: 15s (20s at night)
+- First-use text: "scraps of roots and berries from the green patch. enough to survive."
+- Counts toward `game.gatherCounts.food` for snare auto-structure unlock
+
+**Snare line auto-structure** (unlocked after 8 forages):
+- Button: `[build a snare line]`
+- Cost: 10 wood, 5 cloth
+- Build time: 30s
+- Passive output: +1 food / 45s
+- Completion message: "snares along the green patch. something will wander in."
+
 ### §22.9 Replay Value — Persistent Tracker
 localStorage key: `lastEmber_persistent`
 
@@ -1335,11 +1353,11 @@ Gathering is now instant-click with a visual cooldown (no more wait-then-receive
 
 Fire decay is decoupled from the game-day tick.
 
-- **Without hearth:** fire drops 1 level every **5 real minutes**
-- **With hearth:** fire drops 1 level every **10 real minutes**
+- **Without hearth:** fire drops 1 level every **3 real minutes**
+- **With hearth:** fire drops 1 level every **6 real minutes**
 - Wood and food consumption remain on the 2-minute game-day cycle (unchanged)
 
-**`FIRE_DECAY_MS`:** 5 × 60 × 1000 ms (haven.js constant)
+**`FIRE_DECAY_MS`:** 3 × 60 × 1000 ms (haven.js constant)
 
 **`_fireDecayTick()`:** Standalone timer in `_timers.fireDecay`. Reschedules itself after each tick. Hearth check done at reschedule time (so building hearth mid-game takes effect on next tick).
 

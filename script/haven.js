@@ -35,8 +35,8 @@ var Haven = {
   /* GDD §5 — day/night toggle every half game-day = 60 seconds */
   HALF_DAY_MS: 60 * 1000,
 
-  /* Final Overhaul §12 — fire decays 1 level every 5 real minutes */
-  FIRE_DECAY_MS: 5 * 60 * 1000,
+  /* Final Overhaul §12 — fire decays 1 level every 3 real minutes (6 with hearth) */
+  FIRE_DECAY_MS: 3 * 60 * 1000,
 
   /* Final Overhaul §11 — instant gather with cooldown (per-resource amounts below) */
   GATHER_COOLDOWN_MS: 15 * 1000, /* default 15s; iron uses 20s; night adds 5s */
@@ -107,7 +107,8 @@ var Haven = {
     woodpile:     { resource: 'wood',  label: 'build woodpile',      cost: { wood: 10, stone: 5 }, time: 30000, income: { stores: { wood:  1 }, delay: 45 }, msg: 'a woodpile. the scraps add up.' },
     quarryMarker: { resource: 'stone', label: 'mark a quarry',        cost: { stone: 5, iron: 5 },  time: 30000, income: { stores: { stone: 1 }, delay: 45 }, msg: 'a quarry marker. the stone comes easier now.' },
     garden:       { resource: 'herbs', label: 'tend a garden',        cost: { herbs: 5, wood: 5 },  time: 30000, income: { stores: { herbs: 1 }, delay: 60 }, msg: 'a small garden in the green patch. life persists.' },
-    mineShoreUp:  { resource: 'iron',  label: 'shore up the mine',    cost: { iron: 10, wood: 5 },  time: 30000, income: { stores: { iron:  1 }, delay: 60 }, msg: 'the mine holds. iron flows.' }
+    mineShoreUp:  { resource: 'iron',  label: 'shore up the mine',    cost: { iron: 10, wood: 5 },  time: 30000, income: { stores: { iron:  1 }, delay: 60 }, msg: 'the mine holds. iron flows.' },
+    snare:        { resource: 'food',  label: 'build a snare line',   cost: { wood: 10, cloth: 5 }, time: 30000, income: { stores: { food:  1 }, delay: 45 }, msg: 'snares along the green patch. something will wander in.' }
   },
 
   /* FIX 3: villager resource requests — every 5 game-days */
@@ -1028,6 +1029,7 @@ var Haven = {
     /* §11: instant 1-3 units, 15s cooldown */
     Haven._makeGatherButton('gather wood',  'wood',  1, 3, 15000);
     Haven._makeGatherButton('gather stone', 'stone', 1, 3, 15000);
+    Haven._makeGatherButton('forage for food', 'food', 1, 2, 15000, 'scraps of roots and berries from the green patch. enough to survive.');
     Haven._makeStokeButton();
     /* Gather herbs — green patch established at fire level 2+ */
     if ($SM.get('game.fire.level', true) >= 2) {
@@ -1075,8 +1077,8 @@ var Haven = {
 
   /* Final Overhaul §11: instant-click gather with cooldown bar.
      Resources awarded immediately; button goes on cooldown afterward.
-     Night: +5s to all cooldowns. */
-  _makeGatherButton: function(label, resource, min, max, cooldownMs) {
+     Night: +5s to all cooldowns. firstUseText shown on first gather only. */
+  _makeGatherButton: function(label, resource, min, max, cooldownMs, firstUseText) {
     var gMin         = (min        !== undefined) ? min        : Haven.GATHER_MIN;
     var gMax         = (max        !== undefined) ? max        : Haven.GATHER_MAX;
     var baseCooldown = (cooldownMs !== undefined) ? cooldownMs : Haven.GATHER_COOLDOWN_MS;
@@ -1112,6 +1114,7 @@ var Haven = {
       /* Final Overhaul §2: track gather count for auto-structure unlock */
       var count = ($SM.get('game.gatherCounts.' + resource) || 0) + 1;
       $SM.set('game.gatherCounts.' + resource, count, true);
+      if (count === 1 && firstUseText) Haven._addLog(firstUseText);
       Haven._checkAutoStructureUnlock(resource);
 
       /* Start cooldown — night adds 5 seconds */
